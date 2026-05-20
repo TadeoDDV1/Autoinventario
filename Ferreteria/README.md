@@ -4,23 +4,76 @@ Sistema de punto de venta para ferretería construido con Flutter (frontend) y G
 
 ---
 
-## Tabla de Contenidos
+## Inicio Rápido
 
-1. [Arquitectura](#arquitectura)
-2. [Requisitos](#requisitos)
-3. [Configuración](#configuración)
+### 1️⃣ Opción Automática (Recomendado)
+
+```bash
+./start-app.sh
+```
+
+Inicia automáticamente MariaDB, backend y frontend en nuevas ventanas.
+
+### 2️⃣ Opción Manual (Control Total)
+
+**Terminal 1 - Backend:**
+```bash
+./start-backend.sh
+# o manualmente:
+cd backend && ./server
+```
+
+**Terminal 2 - Frontend:**
+```bash
+cd frontend && flutter run
+```
+
+**Terminal 3 - Verificación (Opcional):**
+```bash
+curl http://localhost:8080/api/v1/productos
+```
+
+### 3️⃣ Verificar que Funciona
+
+Cuando ves esto en el backend:
+```
+✅ Conexión a MySQL exitosa
+✅ Listening and serving HTTP on :8080
+```
+
+Y en el frontend:
+```
+✅ Running on http://localhost:XXXXX
+```
+
+¡Todo listo! La app debería conectarse correctamente.
+
+---
+
+## Documentación Adicional
+
+- **Guía Rápida Completa:** Ver [`QUICKSTART.md`](QUICKSTART.md)
+- **Troubleshooting Detallado:** Ver sección [Troubleshooting](#troubleshooting) abajo
+
+---
+
+1. [Inicio Rápido](#inicio-rápido)
+2. [Arquitectura](#arquitectura)
+3. [Requisitos](#requisitos)
+4. [Configuración](#configuración)
    - [Base de Datos](#1-base-de-datos)
    - [Backend](#2-backend)
    - [Frontend](#3-frontend)
-4. [Compilación](#compilación)
+5. [Compilación](#compilación)
    - [Backend](#backend-1)
    - [Frontend](#frontend-1)
-5. [API REST](#api-rest)
-6. [Esquema de Base de Datos](#esquema-de-base-de-datos)
-7. [Pantallas del Frontend](#pantallas-del-frontend)
-8. [Stack Tecnológico](#stack-tecnológico)
-9. [Backup de Base de Datos](#backup-de-base-de-datos)
-10. [Levantar el Sistema](#levantar-el-sistema-completo)
+6. [API REST](#api-rest)
+7. [Esquema de Base de Datos](#esquema-de-base-de-datos)
+8. [Pantallas del Frontend](#pantallas-del-frontend)
+9. [Stack Tecnológico](#stack-tecnológico)
+10. [Backup de Base de Datos](#backup-de-base-de-datos)
+11. [Levantar el Sistema](#levantar-el-sistema-completo)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -382,57 +435,185 @@ mysql -u ferreteria -p ferreteria_db < backend/ferreteria_db_backup.sql
 
 ## Levantar el Sistema Completo
 
-### Paso a paso
+### Opción 1: Inicio Automático (Recomendado)
 
-1. **MySQL/MariaDB** - Asegurar que el servicio esté corriendo:
+```bash
+./start-app.sh
+```
 
-   ```bash
-   sudo systemctl status mysql
-   # o
-   sudo systemctl status mariadb
-   ```
+Este script automatizado:
+- ✅ Verifica MariaDB
+- ✅ Compila el backend si es necesario
+- ✅ Abre el backend en una nueva terminal
+- ✅ Inicia Flutter en la terminal actual
 
-2. **Backend** - En terminal separada:
+### Opción 2: Inicio Manual (Paso a paso)
 
-   ```bash
-   cd backend
-   ./server
-   ```
+Necesitas **3 terminales** abiertas simultáneamente:
 
-3. **Frontend** - En terminal separada:
+#### Terminal 1: Backend
 
-   ```bash
-   cd frontend
-   flutter run
-   ```
+```bash
+cd backend
+./server
+```
+
+Debe mostrar:
+```
+Conexión a MySQL exitosa
+Servidor iniciando en http://localhost:8080
+[GIN-debug] Listening and serving HTTP on :8080
+```
+
+#### Terminal 2: Frontend
+
+```bash
+cd frontend
+flutter run
+```
+
+#### Terminal 3: Verificación (Opcional)
+
+```bash
+# Listar productos (debe devolver JSON)
+curl http://localhost:8080/api/v1/productos
+
+# O probar todas las rutas
+curl http://localhost:8080/api/v1/categorias
+curl http://localhost:8080/api/v1/ventas
+```
 
 ### Despliegue Web en Producción
 
 Para desplegar el build web, copiar el contenido de `frontend/build/web/` a un servidor web (nginx, Apache, Caddy, etc.):
 
 ```bash
-# Ejemplo con Python como servidor simple para pruebas
-cd frontend/build/web
-python3 -m http.server 8081
+# Compilar web en modo producción
+cd frontend
+flutter build web --release
+
+# Copiar a servidor web
+cp -r build/web/* /var/www/ferreteria/
 ```
 
-Para nginx, configurar `server {}` con `root /path/to/frontend/build/web;`.
+**Nginx (ejemplo):**
+```nginx
+server {
+    listen 80;
+    server_name ferreteria.com;
+    
+    root /var/www/ferreteria;
+    index index.html;
+    
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+    
+    # Proxy al backend
+    location /api/v1/ {
+        proxy_pass http://localhost:8080/api/v1/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+```
+
+**Backend en Producción:**
+
+```bash
+# Compilar en modo release
+cd backend
+go build -o server ./cmd/server
+
+# Cambiar .env a valores de producción
+nano .env
+# Cambiar DB_PASSWORD, SERVER_PORT si es necesario
+
+# Usar systemd para iniciar en background
+sudo cp server /opt/ferreteria/server
+sudo systemctl start ferreteria
+sudo systemctl enable ferreteria
+```
+
+**Frontend - Cambiar URL API:**
+
+En `lib/config/api_config.dart`:
+```dart
+class ApiConfig {
+  static const String baseUrl = 'https://ferreteria.com/api/v1';  // Cambiar localhost
+}
+```
+
+Recompilar:
+```bash
+flutter build web --release
+```
 
 ---
 
 ## Troubleshooting
 
+### Error: "Connection refused" en Flutter
+
+**Problema:** El app Flutter muestra `DioException: Connection refused on localhost:8080`
+
+**Causa:** El backend no está corriendo.
+
+**Solución:**
+
+1. Asegurar que el backend esté ejecutándose en Terminal 1:
+   ```bash
+   cd backend
+   ./server
+   ```
+   
+2. Verificar que escuche en puerto 8080:
+   ```bash
+   curl http://localhost:8080/api/v1/productos
+   ```
+
+3. Si aun así no conecta, verificar que el puerto no esté bloqueado:
+   ```bash
+   sudo lsof -i :8080
+   # Si hay algo corriendo, matar el proceso:
+   kill -9 <PID>
+   ```
+
 ### Error de conexión a DB
 
-Verificar que MySQL esté corriendo y las credenciales en `.env` sean correctas:
+Verificar que MariaDB está corriendo y las credenciales en `.env` son correctas:
 
 ```bash
-mysql -u ferreteria -p1234 -e "SELECT 1;"
+# Probar conexión
+mysql -h 127.0.0.1 -u ferreteria -p1234 -e "SELECT 1;"
+
+# Si falla, iniciar MariaDB
+sudo systemctl start mariadb
+# o
+sudo systemctl start mysql
+```
+
+**Credenciales esperadas (en `.env`):**
+```env
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USER=ferreteria
+DB_PASSWORD=1234
+DB_NAME=ferreteria_db
 ```
 
 ### Flutter web no conecta al backend
 
-Verificar CORS en el backend (ya configurado para permitir todos los orígenes en desarrollo). En producción, cambiar `Access-Control-Allow-Origin` al dominio correspondiente.
+Verificar CORS en el backend. En desarrollo ya permite todos los orígenes. Para producción, cambiar el header `Access-Control-Allow-Origin` en `internal/router/router.go`.
+
+### Error "RenderFlex overflowed"
+
+Este es un error de UI (layout), no de conexión. Significa que un widget no cabe en la pantalla. Soluciones:
+
+- Ajustar tamaño de pantalla/dispositivo
+- Usar `Expanded` o `SingleChildScrollView` en el widget que overflowea
+- Revisar `lib/screens/ventas/pos_screen.dart:214`
 
 ### Build de Android falla
 
@@ -440,5 +621,16 @@ Verificar CORS en el backend (ya configurado para permitir todos los orígenes e
 cd frontend
 flutter clean
 flutter pub get
-flutter build apk
+flutter build apk --release
+```
+
+### Backend no inicia después de cambios
+
+Recompilar:
+```bash
+cd backend
+go mod tidy
+go mod download
+go build -o server ./cmd/server
+./server
 ```
