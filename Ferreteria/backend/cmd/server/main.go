@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"net"
 	"os"
 
 	"github.com/ferreteria/backend/config"
@@ -40,9 +41,17 @@ func main() {
 		port = "8080"
 	}
 
-	addr := fmt.Sprintf(":%s", port)
-	log.Printf("Servidor iniciando en http://localhost%s\n", addr)
-	if err := r.Run(addr); err != nil {
+	addr := fmt.Sprintf("0.0.0.0:%s", port)
+	log.Printf("Servidor iniciando en http://0.0.0.0%s\n", port)
+
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("Error iniciando servidor: %v", err)
+	}
+	defer ln.Close()
+
+	log.Printf("Servidor escuchando en todas las interfaces %s\n", addr)
+	if err := r.RunListener(ln); err != nil {
 		log.Fatalf("Error iniciando servidor: %v", err)
 	}
 }
