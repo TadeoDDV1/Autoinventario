@@ -67,11 +67,7 @@ class CarritoWidget extends ConsumerWidget {
                         Icons.add_shopping_cart,
                         size: 64,
                         color: theme.colorScheme.outline,
-                      )
-                          .animate(onPlay: (c) => c.repeat())
-                          .fadeIn(duration: 600.ms)
-                          .then()
-                          .shake(duration: 800.ms),
+                      ),
                       const SizedBox(height: 16),
                       Text(
                         'Carrito vacío',
@@ -106,9 +102,8 @@ class CarritoWidget extends ConsumerWidget {
                           .read(carritoProvider.notifier)
                           .quitarProducto(item.producto.id),
                     )
-                        .animate()
-                        .fadeIn(duration: 200.ms, delay: (index * 50).ms)
-                        .slideX(begin: 0.1, end: 0, duration: 200.ms);
+                    .animate()
+                    .fadeIn(duration: 200.ms, delay: (index * 50).ms);
                   },
                 ),
         ),

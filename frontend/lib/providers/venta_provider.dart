@@ -1,6 +1,11 @@
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/producto.dart';
 import '../models/venta.dart';
+import 'producto_provider.dart';
+
+const String _carritoKey = 'carrito_items';
 
 class CarritoItem {
   final Producto producto;
@@ -19,11 +24,59 @@ class CarritoItem {
       cantidad: cantidad ?? this.cantidad,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'producto': producto.id,
+        'cantidad': cantidad,
+      };
+
+  static CarritoItem fromJson(Map<String, dynamic> json, List<Producto> productos) {
+    final productoId = json['producto'] as int;
+    final producto = productos.firstWhere((p) => p.id == productoId);
+    return CarritoItem(
+      producto: producto,
+      cantidad: json['cantidad'] as int,
+    );
+  }
 }
 
 class CarritoNotifier extends Notifier<List<CarritoItem>> {
   @override
-  List<CarritoItem> build() => [];
+  List<CarritoItem> build() {
+    _loadFromStorage();
+    return [];
+  }
+
+  Future<void> _loadFromStorage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final carritoJson = prefs.getString(_carritoKey);
+      if (carritoJson != null) {
+        // Load productos from API first to reconstruct
+        final api = ref.read(apiServiceProvider);
+        final productosResponse = await api.getProductos(pageSize: 100);
+        final productos = productosResponse.data;
+
+        final List<dynamic> decoded = jsonDecode(carritoJson);
+        final items = decoded
+            .map((json) => CarritoItem.fromJson(json as Map<String, dynamic>, productos))
+            .toList();
+        state = items;
+      }
+    } catch (_) {
+      // Ignore storage errors
+    }
+  }
+
+  Future<void> _saveToStorage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final json = state.map((item) => item.toJson()).toList();
+      await prefs.setString(_carritoKey, jsonEncode(json));
+    } catch (_) {
+      // Ignore storage errors
+    }
+  }
 
   void agregarProducto(Producto producto) {
     final index = state.indexWhere((item) => item.producto.id == producto.id);
@@ -37,10 +90,12 @@ class CarritoNotifier extends Notifier<List<CarritoItem>> {
     } else {
       state = [...state, CarritoItem(producto: producto, cantidad: 1)];
     }
+    _saveToStorage();
   }
 
   void quitarProducto(int productoId) {
     state = state.where((item) => item.producto.id != productoId).toList();
+    _saveToStorage();
   }
 
   void actualizarCantidad(int productoId, int cantidad) {
@@ -56,6 +111,7 @@ class CarritoNotifier extends Notifier<List<CarritoItem>> {
         ...state.sublist(index + 1),
       ];
     }
+    _saveToStorage();
   }
 
   void incrementarCantidad(int productoId) {
@@ -68,6 +124,7 @@ class CarritoNotifier extends Notifier<List<CarritoItem>> {
         ...state.sublist(index + 1),
       ];
     }
+    _saveToStorage();
   }
 
   void decrementarCantidad(int productoId) {
@@ -84,10 +141,12 @@ class CarritoNotifier extends Notifier<List<CarritoItem>> {
         ];
       }
     }
+    _saveToStorage();
   }
 
   void vaciar() {
     state = [];
+    _saveToStorage();
   }
 }
 

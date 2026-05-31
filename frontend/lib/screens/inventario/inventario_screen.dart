@@ -126,14 +126,10 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                              Icons.inventory_2_outlined,
-                              size: 80,
-                              color: theme.colorScheme.outline,
-                            )
-                            .animate(onPlay: (c) => c.repeat())
-                            .fadeIn(duration: 600.ms)
-                            .then()
-                            .shake(duration: 800.ms),
+                                                  Icons.inventory_2_outlined,
+                                                  size: 80,
+                                                  color: theme.colorScheme.outline,
+                                                ),
                         const SizedBox(height: 16),
                         Text(
                           'No se encontraron productos',
@@ -162,25 +158,16 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
                     final producto = paginated.data[index];
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 8),
-                      child:
-                          ProductoCard(
-                                producto: producto,
-                                onEdit: () => context.go(
-                                  '/inventario/editar/${producto.id}',
-                                ),
-                                onDelete: () => _showDeleteConfirmation(
-                                  producto.id,
-                                  producto.nombre,
-                                ),
-                              )
-                              .animate()
-                              .fadeIn(duration: 300.ms, delay: (index * 50).ms)
-                              .slideY(
-                                begin: 0.1,
-                                end: 0,
-                                duration: 300.ms,
-                                delay: (index * 50).ms,
-                              ),
+                      child: ProductoCard(
+                        producto: producto,
+                        onEdit: () => context.go(
+                          '/inventario/editar/${producto.id}',
+                        ),
+                        onDelete: () => _showDeleteConfirmation(
+                          producto.id,
+                          producto.nombre,
+                        ),
+                      ).animate().fadeIn(duration: 300.ms, delay: (index * 50).ms),
                     );
                   },
                 ),

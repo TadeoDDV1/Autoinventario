@@ -230,7 +230,6 @@ class ProductoCard extends StatelessWidget {
           ),
         )
         .animate()
-        .fadeIn(duration: 300.ms)
-        .slideY(begin: 0.1, end: 0, duration: 300.ms);
+        .fadeIn(duration: 300.ms);
   }
 }

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../models/venta.dart';
@@ -20,6 +19,19 @@ class _CobrosScreenState extends ConsumerState<CobrosScreen> {
   String _metodoPago = 'efectivo';
 
   double get _montoRecibido => double.tryParse(_montoRecibidoStr) ?? 0.0;
+
+  void _setMonto(String monto) {
+    setState(() => _montoRecibidoStr = monto);
+  }
+
+  void _appendToMonto(String digit) {
+    setState(() {
+      if (digit == '.' && _montoRecibidoStr.contains('.')) return;
+      if (_montoRecibidoStr.contains('.') &&
+          _montoRecibidoStr.split('.')[1].length >= 2) return;
+      _montoRecibidoStr += digit;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -75,6 +87,8 @@ class _CobrosScreenState extends ConsumerState<CobrosScreen> {
                   ),
                   const SizedBox(height: 24),
                   if (_metodoPago == 'efectivo') ...[
+                    _buildQuickAmounts(theme, total),
+                    const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -123,23 +137,8 @@ class _CobrosScreenState extends ConsumerState<CobrosScreen> {
                     const SizedBox(height: 16),
                     Expanded(
                       child: NumpadWidget(
-                        onNumberTap: (value) {
-                          setState(() {
-                            if (value == '.' &&
-                                _montoRecibidoStr.contains('.')) {
-                              return;
-                            }
-                            if (_montoRecibidoStr.contains('.') &&
-                                _montoRecibidoStr.split('.').length > 1 &&
-                                _montoRecibidoStr.split('.')[1].length >= 2) {
-                              return;
-                            }
-                            _montoRecibidoStr += value;
-                          });
-                        },
-                        onClear: () {
-                          setState(() => _montoRecibidoStr = '');
-                        },
+                        onNumberTap: _appendToMonto,
+                        onClear: () => setState(() => _montoRecibidoStr = ''),
                         onDelete: () {
                           setState(() {
                             if (_montoRecibidoStr.isNotEmpty) {
@@ -177,11 +176,7 @@ class _CobrosScreenState extends ConsumerState<CobrosScreen> {
                               Icons.credit_card,
                               size: 80,
                               color: theme.colorScheme.primary,
-                            )
-                                .animate(onPlay: (c) => c.repeat())
-                                .fadeIn(duration: 600.ms)
-                                .then()
-                                .shake(duration: 1500.ms),
+                            ),
                             const SizedBox(height: 24),
                             Text(
                               'Esperando tarjeta...',
@@ -218,6 +213,51 @@ class _CobrosScreenState extends ConsumerState<CobrosScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildQuickAmounts(ThemeData theme, double total) {
+    final formatter = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
+    final roundedUp = ((total / 10).ceil() * 10).toInt();
+
+    final quickAmounts = <int>[];
+    if (total <= 20) {
+      quickAmounts.addAll([20, 50, 100]);
+    } else if (total <= 50) {
+      quickAmounts.addAll([50, 100, 200]);
+    } else if (total <= 100) {
+      quickAmounts.addAll([100, 200, 500]);
+    } else {
+      quickAmounts.addAll([roundedUp, roundedUp + 50, roundedUp + 100]);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Cantidades rápidas',
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: quickAmounts.map((amount) {
+            return Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: OutlinedButton(
+                  onPressed: () => _setMonto(amount.toString()),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: Text(formatter.format(amount)),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 

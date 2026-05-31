@@ -3,6 +3,7 @@ import '../config/api_config.dart';
 import '../models/producto.dart';
 import '../models/categoria.dart';
 import '../models/paginated_response.dart';
+import '../models/venta.dart';
 
 class ApiService {
   late final Dio _dio;
@@ -78,5 +79,17 @@ class ApiService {
   Future<int> createCategoria(Map<String, dynamic> data) async {
     final response = await _dio.post('/categorias', data: data);
     return response.data['id'] as int;
+  }
+
+  Future<List<Venta>> getVentas() async {
+    final response = await _dio.get('/ventas');
+    return (response.data as List)
+        .map((e) => Venta.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<Venta> getVentaById(int id) async {
+    final response = await _dio.get('/ventas/$id');
+    return Venta.fromJson(response.data as Map<String, dynamic>);
   }
 }

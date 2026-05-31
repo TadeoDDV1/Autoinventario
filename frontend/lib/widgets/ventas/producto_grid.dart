@@ -52,13 +52,7 @@ class ProductoGrid extends StatelessWidget {
             onTap: () => onProductoTap(producto),
           )
               .animate()
-              .fadeIn(duration: 200.ms, delay: (index * 30).ms)
-              .scale(
-                begin: const Offset(0.95, 0.95),
-                end: const Offset(1, 1),
-                duration: 200.ms,
-                delay: (index * 30).ms,
-              );
+              .fadeIn(duration: 200.ms, delay: (index * 30).ms);
         },
         childCount: productos.length,
       ),

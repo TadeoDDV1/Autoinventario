@@ -7,6 +7,7 @@ import '../../widgets/producto_search_bar.dart';
 import '../../widgets/category_filter.dart';
 import '../../widgets/ventas/carrito_widget.dart';
 import '../../widgets/ventas/producto_grid.dart';
+import '../../widgets/stock_alert_banner.dart';
 
 class PosScreen extends ConsumerStatefulWidget {
   const PosScreen({super.key});
@@ -22,6 +23,24 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onProductoTap(producto) {
+    ref.read(carritoProvider.notifier).agregarProducto(producto);
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${producto.nombre} agregado al carrito'),
+        duration: const Duration(seconds: 1),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: 'Deshacer',
+          onPressed: () {
+            ref.read(carritoProvider.notifier).quitarProducto(producto.id);
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -60,50 +79,85 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                       ],
                     ),
                     SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Column(
-                          children: [
-                            ProductoSearchBar(
-                              controller: _searchController,
-                              onChanged: (value) {
-                                ref
-                                    .read(productoSearchProvider.notifier)
-                                    .update(value);
-                                ref
-                                    .read(productoPageProvider.notifier)
-                                    .update(1);
-                              },
-                              onClear: () {
-                                ref
-                                    .read(productoSearchProvider.notifier)
-                                    .update('');
-                                ref
-                                    .read(productoPageProvider.notifier)
-                                    .update(1);
-                              },
+                      child: Column(
+                        children: [
+                          if (!isWide) const StockAlertBanner(),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Column(
+                              children: [
+                                ProductoSearchBar(
+                                  controller: _searchController,
+                                  onChanged: (value) {
+                                    ref
+                                        .read(productoSearchProvider.notifier)
+                                        .update(value);
+                                    ref
+                                        .read(productoPageProvider.notifier)
+                                        .update(1);
+                                  },
+                                  onClear: () {
+                                    ref
+                                        .read(productoSearchProvider.notifier)
+                                        .update('');
+                                    ref
+                                        .read(productoPageProvider.notifier)
+                                        .update(1);
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                                if (selectedCategoria != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: Row(
+                                      children: [
+                                        Chip(
+                                          label: Text(
+                                            categoriasAsync.when(
+                                              data: (cats) => cats
+                                                      .where((c) => c.id == selectedCategoria)
+                                                      .firstOrNull
+                                                      ?.nombre ??
+                                                  'Categoría',
+                                              loading: () => 'Cargando...',
+                                              error: (_, __) => 'Categoría',
+                                            ),
+                                          ),
+                                          deleteIcon: const Icon(Icons.close, size: 18),
+                                          onDeleted: () {
+                                            ref
+                                                .read(productoCategoriaFilterProvider.notifier)
+                                                .update(null);
+                                            ref
+                                                .read(productoPageProvider.notifier)
+                                                .update(1);
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                categoriasAsync.when(
+                                  data: (categorias) => CategoryFilter(
+                                    categorias: categorias,
+                                    selectedCategoriaId: selectedCategoria,
+                                    onSelected: (id) {
+                                      ref
+                                          .read(productoCategoriaFilterProvider
+                                              .notifier)
+                                          .update(id);
+                                      ref
+                                          .read(productoPageProvider.notifier)
+                                          .update(1);
+                                    },
+                                  ),
+                                  loading: () => const SizedBox.shrink(),
+                                  error: (a, b) => const SizedBox.shrink(),
+                                ),
+                                const SizedBox(height: 12),
+                              ],
                             ),
-                            const SizedBox(height: 12),
-                            categoriasAsync.when(
-                              data: (categorias) => CategoryFilter(
-                                categorias: categorias,
-                                selectedCategoriaId: selectedCategoria,
-                                onSelected: (id) {
-                                  ref
-                                      .read(productoCategoriaFilterProvider
-                                          .notifier)
-                                      .update(id);
-                                  ref
-                                      .read(productoPageProvider.notifier)
-                                      .update(1);
-                                },
-                              ),
-                              loading: () => const SizedBox.shrink(),
-                              error: (a, b) => const SizedBox.shrink(),
-                            ),
-                            const SizedBox(height: 12),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                     productosAsync.when(
@@ -111,11 +165,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         sliver: ProductoGrid(
                           productos: paginated.data,
-                          onProductoTap: (producto) {
-                            ref
-                                .read(carritoProvider.notifier)
-                                .agregarProducto(producto);
-                          },
+                          onProductoTap: _onProductoTap,
                         ),
                       ),
                       loading: () => const SliverFillRemaining(
@@ -133,6 +183,12 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                               ),
                               const SizedBox(height: 16),
                               Text('Error al cargar productos'),
+                              const SizedBox(height: 8),
+                              Text(
+                                error.toString(),
+                                style: theme.textTheme.bodySmall,
+                                textAlign: TextAlign.center,
+                              ),
                             ],
                           ),
                         ),
