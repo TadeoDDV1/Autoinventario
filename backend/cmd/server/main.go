@@ -1,26 +1,36 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/ferreteria/backend/config"
 	"github.com/ferreteria/backend/internal/handler"
 	"github.com/ferreteria/backend/internal/repository"
-	"github.com/ferreteria/backend/internal/service"
 	"github.com/ferreteria/backend/internal/router"
+	"github.com/ferreteria/backend/internal/service"
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})))
+
 	db, err := config.ConnectDB()
 	if err != nil {
-		log.Fatalf("Error conectando a la base de datos: %v", err)
+		slog.Error("db_connect_failed", slog.Any("error", err))
+		os.Exit(1)
 	}
 	defer db.Close()
-
-	log.Println("Conexión a MySQL exitosa")
+	slog.Info("db_connected")
 
 	productoRepo := repository.NewProductoRepository(db)
 	productoService := service.NewProductoService(productoRepo)
@@ -42,16 +52,44 @@ func main() {
 	}
 
 	addr := fmt.Sprintf("0.0.0.0:%s", port)
-	log.Printf("Servidor iniciando en http://0.0.0.0%s\n", port)
+
+	srv := &http.Server{
+		Handler:           r,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		log.Fatalf("Error iniciando servidor: %v", err)
+		slog.Error("listen_failed", slog.String("addr", addr), slog.Any("error", err))
+		os.Exit(1)
 	}
-	defer ln.Close()
 
-	log.Printf("Servidor escuchando en todas las interfaces %s\n", addr)
-	if err := r.RunListener(ln); err != nil {
-		log.Fatalf("Error iniciando servidor: %v", err)
+	serverErr := make(chan error, 1)
+	go func() {
+		slog.Info("server_listening", slog.String("addr", ln.Addr().String()))
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case err := <-serverErr:
+		slog.Error("server_error", slog.Any("error", err))
+		os.Exit(1)
+	case sig := <-quit:
+		slog.Info("shutdown_signal", slog.String("signal", sig.String()))
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		slog.Error("shutdown_forced", slog.Any("error", err))
+	}
+	slog.Info("server_stopped")
 }

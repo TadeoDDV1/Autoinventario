@@ -1,26 +1,31 @@
 package router
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"log/slog"
 	"net/http"
+	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/ferreteria/backend/internal/handler"
+	"github.com/gin-gonic/gin"
 )
 
+const RequestIDHeader = "X-Request-ID"
+
 func SetupRouter(productoHandler *handler.ProductoHandler, ventaHandler *handler.VentaHandler, entradaHandler *handler.EntradaHandler) *gin.Engine {
-	r := gin.Default()
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.New()
+	r.Use(gin.Recovery())
+	r.Use(requestIDMiddleware())
+	r.Use(loggingMiddleware())
+	r.Use(corsMiddleware())
 
-	r.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		if c.Request.Method == http.MethodOptions {
-			c.AbortWithStatus(http.StatusNoContent)
-			return
-		}
-
-		c.Next()
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":    "ok",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+		})
 	})
 
 	api := r.Group("/api/v1")
@@ -28,9 +33,11 @@ func SetupRouter(productoHandler *handler.ProductoHandler, ventaHandler *handler
 		productos := api.Group("/productos")
 		{
 			productos.GET("", productoHandler.GetAll)
+			productos.GET("/buscar", productoHandler.BuscarPorCodigo)
 			productos.GET("/:id", productoHandler.GetByID)
 			productos.POST("", productoHandler.Create)
 			productos.PUT("/:id", productoHandler.Update)
+			productos.PATCH("/:id/stock", productoHandler.AjustarStock)
 			productos.DELETE("/:id", productoHandler.Delete)
 		}
 
@@ -57,4 +64,64 @@ func SetupRouter(productoHandler *handler.ProductoHandler, ventaHandler *handler
 	}
 
 	return r
+}
+
+func requestIDMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rid := c.GetHeader(RequestIDHeader)
+		if rid == "" {
+			rid = newRequestID()
+		}
+		c.Set("request_id", rid)
+		c.Header(RequestIDHeader, rid)
+		c.Next()
+	}
+}
+
+func loggingMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+		latency := time.Since(start)
+
+		slog.Info("http_request",
+			slog.String("method", c.Request.Method),
+			slog.String("path", c.Request.URL.Path),
+			slog.String("query", c.Request.URL.RawQuery),
+			slog.Int("status", c.Writer.Status()),
+			slog.Duration("latency", latency),
+			slog.String("client_ip", c.ClientIP()),
+			slog.String("request_id", c.GetString("request_id")),
+		)
+	}
+}
+
+func corsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		origin := c.GetHeader("Origin")
+		if origin != "" {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Vary", "Origin")
+		} else {
+			c.Header("Access-Control-Allow-Origin", "*")
+		}
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, "+RequestIDHeader)
+		c.Header("Access-Control-Max-Age", "600")
+
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+
+		c.Next()
+	}
+}
+
+func newRequestID() string {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		return "req-unknown"
+	}
+	return hex.EncodeToString(b)
 }

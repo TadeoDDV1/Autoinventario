@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flex_color_scheme/flex_color_scheme.dart';
 import 'config/routes.dart';
+import 'providers/theme_provider.dart';
 
 class FerreteriaApp extends ConsumerWidget {
   const FerreteriaApp({super.key});
@@ -10,6 +11,8 @@ class FerreteriaApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final goRouter = ref.watch(routerProvider);
+    final themeMode = ref.watch(themeProvider);
+    final platform = MediaQuery.platformBrightnessOf(context);
 
     final theme = FlexThemeData.light(
       scheme: FlexScheme.blue,
@@ -45,6 +48,7 @@ class FerreteriaApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: theme,
       darkTheme: darkTheme,
+      themeMode: resolveThemeMode(themeMode, platform),
       routerConfig: goRouter,
     );
   }

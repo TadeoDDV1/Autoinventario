@@ -46,3 +46,11 @@ func (s *ProductoService) GetCategorias() ([]models.Categoria, error) {
 func (s *ProductoService) CreateCategoria(c *models.CategoriaCreate) (int64, error) {
 	return s.repo.CreateCategoria(c)
 }
+
+func (s *ProductoService) BuscarPorCodigo(codigo string) (*models.Producto, error) {
+	return s.repo.BuscarPorCodigo(codigo)
+}
+
+func (s *ProductoService) AjustarStock(id int, cantidad int) error {
+	return s.repo.AjustarStock(id, cantidad)
+}

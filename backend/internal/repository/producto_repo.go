@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jmoiron/sqlx"
+	"github.com/ferreteria/backend/internal/apperrors"
 	"github.com/ferreteria/backend/internal/models"
+	"github.com/jmoiron/sqlx"
 )
 
 type ProductoRepository struct {
@@ -19,20 +20,17 @@ func NewProductoRepository(db *sqlx.DB) *ProductoRepository {
 func (r *ProductoRepository) GetAll(page, pageSize int, search string, categoriaID *int) ([]models.Producto, int64, error) {
 	var conditions []string
 	var args []interface{}
-	argPos := 1
 
 	conditions = append(conditions, "p.activo = TRUE")
 
 	if search != "" {
-		conditions = append(conditions, fmt.Sprintf("(p.nombre LIKE ? OR p.codigo_barras LIKE ? OR p.descripcion LIKE ?)"))
+		conditions = append(conditions, "(p.nombre LIKE ? OR p.codigo_barras LIKE ? OR p.descripcion LIKE ?)")
 		args = append(args, "%"+search+"%", "%"+search+"%", "%"+search+"%")
-		argPos += 3
 	}
 
 	if categoriaID != nil {
-		conditions = append(conditions, fmt.Sprintf("p.categoria_id = ?"))
+		conditions = append(conditions, "p.categoria_id = ?")
 		args = append(args, *categoriaID)
-		argPos++
 	}
 
 	whereClause := "WHERE " + strings.Join(conditions, " AND ")
@@ -44,11 +42,11 @@ func (r *ProductoRepository) GetAll(page, pageSize int, search string, categoria
 	}
 
 	offset := (page - 1) * pageSize
-	query := `SELECT p.*, c.nombre as categoria_nombre 
-		FROM productos p 
-		LEFT JOIN categorias c ON p.categoria_id = c.id 
-		` + whereClause + ` 
-		ORDER BY p.nombre ASC 
+	query := `SELECT p.*, c.nombre as categoria_nombre
+		FROM productos p
+		LEFT JOIN categorias c ON p.categoria_id = c.id
+		` + whereClause + `
+		ORDER BY p.nombre ASC
 		LIMIT ? OFFSET ?`
 
 	args = append(args, pageSize, offset)
@@ -63,19 +61,19 @@ func (r *ProductoRepository) GetAll(page, pageSize int, search string, categoria
 
 func (r *ProductoRepository) GetByID(id int) (*models.Producto, error) {
 	var producto models.Producto
-	query := `SELECT p.*, c.nombre as categoria_nombre 
-		FROM productos p 
-		LEFT JOIN categorias c ON p.categoria_id = c.id 
+	query := `SELECT p.*, c.nombre as categoria_nombre
+		FROM productos p
+		LEFT JOIN categorias c ON p.categoria_id = c.id
 		WHERE p.id = ? AND p.activo = TRUE`
 
 	if err := r.db.Get(&producto, query, id); err != nil {
-		return nil, err
+		return nil, apperrors.NewNotFound("producto", id)
 	}
 	return &producto, nil
 }
 
 func (r *ProductoRepository) Create(p *models.ProductoCreate) (int64, error) {
-	query := `INSERT INTO productos (codigo_barras, nombre, descripcion, precio_compra, precio_venta, stock_actual, stock_minimo, categoria_id, imagen_url) 
+	query := `INSERT INTO productos (codigo_barras, nombre, descripcion, precio_compra, precio_venta, stock_actual, stock_minimo, categoria_id, imagen_url)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	result, err := r.db.Exec(query,
@@ -131,7 +129,7 @@ func (r *ProductoRepository) Update(id int, p *models.ProductoUpdate) error {
 	}
 
 	if len(setClauses) == 0 {
-		return fmt.Errorf("no hay campos para actualizar")
+		return apperrors.ErrNoHayCampos
 	}
 
 	query := "UPDATE productos SET " + strings.Join(setClauses, ", ") + " WHERE id = ? AND activo = TRUE"
@@ -144,7 +142,7 @@ func (r *ProductoRepository) Update(id int, p *models.ProductoUpdate) error {
 
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("producto no encontrado")
+		return apperrors.NewNotFound("producto", id)
 	}
 
 	return nil
@@ -158,7 +156,7 @@ func (r *ProductoRepository) Delete(id int) error {
 
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("producto no encontrado")
+		return apperrors.NewNotFound("producto", id)
 	}
 
 	return nil
@@ -166,8 +164,7 @@ func (r *ProductoRepository) Delete(id int) error {
 
 func (r *ProductoRepository) GetCategorias() ([]models.Categoria, error) {
 	categorias := make([]models.Categoria, 0)
-	query := "SELECT * FROM categorias WHERE activo = TRUE ORDER BY nombre ASC"
-	if err := r.db.Select(&categorias, query); err != nil {
+	if err := r.db.Select(&categorias, "SELECT * FROM categorias WHERE activo = TRUE ORDER BY nombre ASC"); err != nil {
 		return nil, err
 	}
 	return categorias, nil
@@ -179,4 +176,34 @@ func (r *ProductoRepository) CreateCategoria(c *models.CategoriaCreate) (int64, 
 		return 0, err
 	}
 	return result.LastInsertId()
+}
+
+func (r *ProductoRepository) BuscarPorCodigo(codigo string) (*models.Producto, error) {
+	var producto models.Producto
+	query := `SELECT p.*, c.nombre as categoria_nombre
+		FROM productos p
+		LEFT JOIN categorias c ON p.categoria_id = c.id
+		WHERE p.codigo_barras = ? AND p.activo = TRUE`
+
+	if err := r.db.Get(&producto, query, codigo); err != nil {
+		return nil, apperrors.NewNotFound("producto con código "+codigo, 0)
+	}
+	return &producto, nil
+}
+
+func (r *ProductoRepository) AjustarStock(id int, cantidad int) error {
+	if cantidad < 0 {
+		return fmt.Errorf("cantidad no puede ser negativa")
+	}
+	result, err := r.db.Exec("UPDATE productos SET stock_actual = ? WHERE id = ? AND activo = TRUE", cantidad, id)
+	if err != nil {
+		return err
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperrors.NewNotFound("producto", id)
+	}
+
+	return nil
 }

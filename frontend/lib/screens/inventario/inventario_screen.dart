@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/constants/durations.dart';
+import '../../core/layout/breakpoints.dart';
 import '../../providers/producto_provider.dart';
+import '../../shared/widgets/skeleton_loader.dart';
 import '../../widgets/producto_search_bar.dart';
 import '../../widgets/producto_card.dart';
 import '../../widgets/category_filter.dart';
@@ -27,8 +29,10 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
   void _onSearchChanged(String value) {
     final now = DateTime.now();
     if (_lastSearchTime != null &&
-        now.difference(_lastSearchTime!).inMilliseconds < 300)
+        now.difference(_lastSearchTime!).inMilliseconds <
+            AppDurations.debounceSearch.inMilliseconds) {
       return;
+    }
     _lastSearchTime = now;
     ref.read(productoSearchProvider.notifier).update(value);
     ref.read(productoPageProvider.notifier).update(1);
@@ -126,10 +130,10 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                                                  Icons.inventory_2_outlined,
-                                                  size: 80,
-                                                  color: theme.colorScheme.outline,
-                                                ),
+                          Icons.inventory_2_outlined,
+                          size: 80,
+                          color: theme.colorScheme.outline,
+                        ),
                         const SizedBox(height: 16),
                         Text(
                           'No se encontraron productos',
@@ -167,14 +171,15 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
                           producto.id,
                           producto.nombre,
                         ),
-                      ).animate().fadeIn(duration: 300.ms, delay: (index * 50).ms),
+                      ),
                     );
                   },
                 ),
               );
             },
             loading: () => const SliverFillRemaining(
-              child: Center(child: CircularProgressIndicator()),
+              hasScrollBody: false,
+              child: SkeletonList(),
             ),
             error: (error, _) => SliverFillRemaining(
               child: Center(
@@ -213,7 +218,9 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
       floatingActionButton: LayoutBuilder(
         builder: (context, _) {
           final width = MediaQuery.of(context).size.width;
-          if (width > 600) return const SizedBox.shrink();
+          if (Breakpoints.isTablet(width) || Breakpoints.isDesktop(width)) {
+            return const SizedBox.shrink();
+          }
           return FloatingActionButton.extended(
             onPressed: () => context.go('/inventario/nuevo'),
             icon: const Icon(Icons.add),

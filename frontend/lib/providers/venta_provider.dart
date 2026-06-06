@@ -1,6 +1,8 @@
 import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/producto.dart';
 import '../models/venta.dart';
 import 'producto_provider.dart';
@@ -30,7 +32,10 @@ class CarritoItem {
         'cantidad': cantidad,
       };
 
-  static CarritoItem fromJson(Map<String, dynamic> json, List<Producto> productos) {
+  static CarritoItem fromJson(
+    Map<String, dynamic> json,
+    List<Producto> productos,
+  ) {
     final productoId = json['producto'] as int;
     final producto = productos.firstWhere((p) => p.id == productoId);
     return CarritoItem(
@@ -41,30 +46,34 @@ class CarritoItem {
 }
 
 class CarritoNotifier extends Notifier<List<CarritoItem>> {
+  bool _hydrated = false;
+
   @override
   List<CarritoItem> build() {
-    _loadFromStorage();
-    return [];
+    if (!_hydrated) {
+      Future.microtask(loadFromStorage);
+    }
+    return const <CarritoItem>[];
   }
 
-  Future<void> _loadFromStorage() async {
+  Future<void> loadFromStorage() async {
+    if (_hydrated) return;
+    _hydrated = true;
     try {
       final prefs = await SharedPreferences.getInstance();
       final carritoJson = prefs.getString(_carritoKey);
-      if (carritoJson != null) {
-        // Load productos from API first to reconstruct
-        final api = ref.read(apiServiceProvider);
-        final productosResponse = await api.getProductos(pageSize: 100);
-        final productos = productosResponse.data;
-
-        final List<dynamic> decoded = jsonDecode(carritoJson);
-        final items = decoded
-            .map((json) => CarritoItem.fromJson(json as Map<String, dynamic>, productos))
-            .toList();
-        state = items;
-      }
+      if (carritoJson == null) return;
+      final api = ref.read(apiServiceProvider);
+      final productosResponse = await api.getProductos(pageSize: 100);
+      final productos = productosResponse.data;
+      final List<dynamic> decoded = jsonDecode(carritoJson);
+      final items = decoded
+          .map((json) =>
+              CarritoItem.fromJson(json as Map<String, dynamic>, productos))
+          .toList();
+      state = items;
     } catch (_) {
-      // Ignore storage errors
+      // Si falla la carga, dejar el carrito vacío silenciosamente
     }
   }
 
@@ -175,11 +184,7 @@ final carritoCantidadProvider = Provider<int>((ref) {
   return carrito.fold(0, (sum, item) => sum + item.cantidad);
 });
 
-final metodoPagoProvider = NotifierProvider<MetodoPagoNotifier, MetodoPago>(
-  MetodoPagoNotifier.new,
-);
-
-class MetodoPagoNotifier extends Notifier<MetodoPago> {
-  @override
-  MetodoPago build() => MetodoPago.efectivo;
-}
+final ventasProvider = FutureProvider<List<Venta>>((ref) async {
+  final api = ref.read(apiServiceProvider);
+  return api.getVentas();
+});

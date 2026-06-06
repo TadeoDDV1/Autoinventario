@@ -1,13 +1,15 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
-	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
+	"github.com/ferreteria/backend/internal/apperrors"
 	"github.com/ferreteria/backend/internal/models"
 	"github.com/ferreteria/backend/internal/service"
+	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 )
 
 type ProductoHandler struct {
@@ -37,10 +39,7 @@ func (h *ProductoHandler) GetAll(c *gin.Context) {
 
 	productos, total, err := h.service.GetAll(page, pageSize, search, categoriaID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.APIError{
-			Error:   "INTERNAL_ERROR",
-			Message: "Error al obtener productos",
-		})
+		respondError(c, err, http.StatusInternalServerError, "INTERNAL_ERROR", "Error al obtener productos")
 		return
 	}
 
@@ -67,7 +66,7 @@ func (h *ProductoHandler) GetByID(c *gin.Context) {
 
 	producto, err := h.service.GetByID(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, models.APIError{Error: "NOT_FOUND", Message: "Producto no encontrado"})
+		respondError(c, err, http.StatusNotFound, "NOT_FOUND", "Producto no encontrado")
 		return
 	}
 
@@ -88,7 +87,7 @@ func (h *ProductoHandler) Create(c *gin.Context) {
 
 	id, err := h.service.Create(&req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.APIError{Error: "INTERNAL_ERROR", Message: "Error al crear producto"})
+		respondError(c, err, http.StatusInternalServerError, "INTERNAL_ERROR", "Error al crear producto")
 		return
 	}
 
@@ -109,7 +108,11 @@ func (h *ProductoHandler) Update(c *gin.Context) {
 	}
 
 	if err := h.service.Update(id, &req); err != nil {
-		c.JSON(http.StatusInternalServerError, models.APIError{Error: "INTERNAL_ERROR", Message: err.Error()})
+		if errors.Is(err, apperrors.ErrNoHayCampos) {
+			c.JSON(http.StatusBadRequest, models.APIError{Error: "EMPTY_UPDATE", Message: err.Error()})
+			return
+		}
+		respondError(c, err, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
 
@@ -124,7 +127,7 @@ func (h *ProductoHandler) Delete(c *gin.Context) {
 	}
 
 	if err := h.service.Delete(id); err != nil {
-		c.JSON(http.StatusNotFound, models.APIError{Error: "NOT_FOUND", Message: err.Error()})
+		respondError(c, err, http.StatusNotFound, "NOT_FOUND", err.Error())
 		return
 	}
 
@@ -134,7 +137,7 @@ func (h *ProductoHandler) Delete(c *gin.Context) {
 func (h *ProductoHandler) GetCategorias(c *gin.Context) {
 	categorias, err := h.service.GetCategorias()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.APIError{Error: "INTERNAL_ERROR", Message: "Error al obtener categorías"})
+		respondError(c, err, http.StatusInternalServerError, "INTERNAL_ERROR", "Error al obtener categorías")
 		return
 	}
 
@@ -155,9 +158,61 @@ func (h *ProductoHandler) CreateCategoria(c *gin.Context) {
 
 	id, err := h.service.CreateCategoria(&req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.APIError{Error: "INTERNAL_ERROR", Message: "Error al crear categoría"})
+		respondError(c, err, http.StatusInternalServerError, "INTERNAL_ERROR", "Error al crear categoría")
 		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"id": id, "message": "Categoría creada exitosamente"})
+}
+
+func (h *ProductoHandler) BuscarPorCodigo(c *gin.Context) {
+	codigo := c.Query("codigo")
+	if codigo == "" {
+		c.JSON(http.StatusBadRequest, models.APIError{Error: "BAD_REQUEST", Message: "Código requerido"})
+		return
+	}
+
+	producto, err := h.service.BuscarPorCodigo(codigo)
+	if err != nil {
+		respondError(c, err, http.StatusNotFound, "NOT_FOUND", "Producto no encontrado")
+		return
+	}
+
+	c.JSON(http.StatusOK, producto)
+}
+
+func (h *ProductoHandler) AjustarStock(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIError{Error: "BAD_REQUEST", Message: "ID inválido"})
+		return
+	}
+
+	var req struct {
+		Cantidad int `json:"cantidad" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.APIError{Error: "BAD_REQUEST", Message: err.Error()})
+		return
+	}
+
+	if err := h.service.AjustarStock(id, req.Cantidad); err != nil {
+		respondError(c, err, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Stock actualizado exitosamente"})
+}
+
+func respondError(c *gin.Context, err error, defaultStatus int, defaultCode, defaultMessage string) {
+	switch {
+	case errors.Is(err, apperrors.ErrNotFound):
+		c.JSON(http.StatusNotFound, models.APIError{Error: "NOT_FOUND", Message: err.Error()})
+	case errors.Is(err, apperrors.ErrStockInsuficiente):
+		c.JSON(http.StatusConflict, models.APIError{Error: "STOCK_INSUFICIENTE", Message: err.Error()})
+	case errors.Is(err, apperrors.ErrIDInvalido):
+		c.JSON(http.StatusBadRequest, models.APIError{Error: "BAD_REQUEST", Message: err.Error()})
+	default:
+		c.JSON(defaultStatus, models.APIError{Error: defaultCode, Message: defaultMessage})
+	}
 }

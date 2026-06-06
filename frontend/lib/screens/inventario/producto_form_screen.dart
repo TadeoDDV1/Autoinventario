@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/constants/durations.dart';
+import '../../core/errors/api_exception.dart';
 import '../../providers/producto_provider.dart';
 
 class ProductoFormScreen extends ConsumerStatefulWidget {
@@ -51,6 +53,17 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
         _imagenUrlController.text = producto.imagenUrl ?? '';
         _selectedCategoriaId = producto.categoriaId;
         setState(() => _isLoading = false);
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar producto: ${e.message}'),
+            backgroundColor: Colors.red.shade700,
+            duration: AppDurations.snackbarLong,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -120,11 +133,26 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
         );
         context.go('/inventario');
       }
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.message}'),
+            backgroundColor: Colors.red.shade700,
+            duration: AppDurations.snackbarLong,
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red.shade700,
+            duration: AppDurations.snackbarLong,
+          ),
         );
       }
     }
@@ -232,10 +260,12 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
                                       decimal: true,
                                     ),
                                 validator: (v) {
-                                  if (v == null || v.isEmpty)
+                                  if (v == null || v.isEmpty) {
                                     return 'Requerido';
-                                  if (double.tryParse(v) == null)
-                                    return 'Número inválido';
+                                  }
+                                  final val = double.tryParse(v);
+                                  if (val == null) return 'Número inválido';
+                                  if (val < 0) return 'No puede ser negativo';
                                   return null;
                                 },
                               ),
@@ -253,8 +283,9 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
                                       decimal: true,
                                     ),
                                 validator: (v) {
-                                  if (v == null || v.isEmpty)
+                                  if (v == null || v.isEmpty) {
                                     return 'Requerido';
+                                  }
                                   final val = double.tryParse(v);
                                   if (val == null) return 'Número inválido';
                                   if (val <= 0) return 'Debe ser mayor a 0';
@@ -278,8 +309,9 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
                                 ),
                                 keyboardType: TextInputType.number,
                                 validator: (v) {
-                                  if (v != null && int.tryParse(v) == null)
+                                  if (v != null && int.tryParse(v) == null) {
                                     return 'Inválido';
+                                  }
                                   return null;
                                 },
                               ),
@@ -294,8 +326,9 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
                                 ),
                                 keyboardType: TextInputType.number,
                                 validator: (v) {
-                                  if (v != null && int.tryParse(v) == null)
+                                  if (v != null && int.tryParse(v) == null) {
                                     return 'Inválido';
+                                  }
                                   return null;
                                 },
                               ),

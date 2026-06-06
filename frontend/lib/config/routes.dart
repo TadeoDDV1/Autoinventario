@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../core/layout/breakpoints.dart';
+import '../domain/enums.dart';
 import '../models/venta.dart';
-import '../screens/inventario/inventario_screen.dart';
-import '../screens/inventario/producto_form_screen.dart';
-import '../screens/ventas/pos_screen.dart';
-import '../screens/ventas/cobros_screen.dart';
+import '../providers/theme_provider.dart';
+import '../screens/caja/caja_screen.dart';
 import '../screens/ventas/ticket_screen.dart';
 import '../screens/ventas/historial_ventas_screen.dart';
+import '../screens/inventario/inventario_screen.dart';
+import '../screens/inventario/producto_form_screen.dart';
 import '../widgets/stock_alert_banner.dart';
+import '../providers/modo_provider.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -16,7 +19,7 @@ final _shellNavigatorKey = GlobalKey<NavigatorState>();
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
-    initialLocation: '/ventas',
+    initialLocation: '/caja',
     routes: [
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
@@ -24,17 +27,13 @@ final routerProvider = Provider<GoRouter>((ref) {
           return AppShell(child: child);
         },
         routes: [
+          // Modo Caja
           GoRoute(
-            path: '/ventas',
+            path: '/caja',
             pageBuilder: (context, state) => const NoTransitionPage(
-              child: PosScreen(),
+              child: CajaScreen(),
             ),
             routes: [
-              GoRoute(
-                path: 'cobros',
-                parentNavigatorKey: _rootNavigatorKey,
-                builder: (context, state) => const CobrosScreen(),
-              ),
               GoRoute(
                 path: 'ticket',
                 parentNavigatorKey: _rootNavigatorKey,
@@ -50,6 +49,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
+          // Modo Inventario
           GoRoute(
             path: '/inventario',
             pageBuilder: (context, state) => const NoTransitionPage(
@@ -96,10 +96,12 @@ class _AppShellState extends ConsumerState<AppShell> {
   void _onDestinationSelected(int index) {
     switch (index) {
       case 0:
-        context.go('/ventas');
+        context.go('/caja');
+        ref.read(modoAppProvider.notifier).setModo(ModoApp.caja);
         break;
       case 1:
         context.go('/inventario');
+        ref.read(modoAppProvider.notifier).setModo(ModoApp.inventario);
         break;
     }
   }
@@ -108,7 +110,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final width = MediaQuery.of(context).size.width;
-    final isWide = width > 800;
+    final isWide = Breakpoints.isDesktop(width);
     final selectedIndex = _getSelectedIndex(context);
     final stockAlertCount = ref.watch(stockAlertCountProvider);
 
@@ -116,7 +118,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       NavigationDestination(
         icon: const Icon(Icons.point_of_sale_outlined),
         selectedIcon: const Icon(Icons.point_of_sale),
-        label: 'Ventas',
+        label: 'Caja',
       ),
       NavigationDestination(
         icon: Badge(
@@ -157,6 +159,20 @@ class _AppShellState extends ConsumerState<AppShell> {
                   color: theme.colorScheme.primary,
                 ),
               ),
+              trailing: Expanded(
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: IconButton(
+                      onPressed: () =>
+                          ref.read(themeProvider.notifier).toggle(context),
+                      icon: Icon(_themeIcon(theme)),
+                      tooltip: _themeTooltip(theme),
+                    ),
+                  ),
+                ),
+              ),
               destinations: railDestinations,
             ),
           if (isWide)
@@ -183,5 +199,26 @@ class _AppShellState extends ConsumerState<AppShell> {
               destinations: destinations,
             ),
     );
+  }
+
+  IconData _themeIcon(ThemeData theme) {
+    final mode = ref.watch(themeProvider);
+    if (mode == AppThemeMode.system) {
+      return theme.brightness == Brightness.dark
+          ? Icons.brightness_auto
+          : Icons.brightness_auto;
+    }
+    return mode == AppThemeMode.dark
+        ? Icons.dark_mode
+        : Icons.light_mode;
+  }
+
+  String _themeTooltip(ThemeData theme) {
+    final mode = ref.watch(themeProvider);
+    return switch (mode) {
+      AppThemeMode.system => 'Tema: Sistema (toca para cambiar)',
+      AppThemeMode.light => 'Tema: Claro (toca para oscuro)',
+      AppThemeMode.dark => 'Tema: Oscuro (toca para sistema)',
+    };
   }
 }

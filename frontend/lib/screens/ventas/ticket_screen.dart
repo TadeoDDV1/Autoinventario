@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../core/format/money.dart';
 import '../../models/venta.dart';
 
 class TicketScreen extends StatelessWidget {
@@ -11,7 +12,7 @@ class TicketScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final formatter = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+    final formatter = money;
     final dateFormatter = DateFormat('dd/MM/yyyy HH:mm');
 
     return Scaffold(
@@ -147,9 +148,7 @@ class TicketScreen extends StatelessWidget {
                           children: [
                             Text('Método de pago', style: theme.textTheme.bodySmall),
                             Text(
-                              venta.metodoPago == 'efectivo'
-                                  ? 'Efectivo'
-                                  : 'Tarjeta',
+                              MetodoPago.fromString(venta.metodoPago).label,
                               style: theme.textTheme.bodySmall?.copyWith(
                                 fontWeight: FontWeight.bold,
                               ),

@@ -1,13 +1,15 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
-	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
+	"github.com/ferreteria/backend/internal/apperrors"
 	"github.com/ferreteria/backend/internal/models"
 	"github.com/ferreteria/backend/internal/service"
+	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 )
 
 type EntradaHandler struct {
@@ -76,7 +78,11 @@ func (h *EntradaHandler) GetByID(c *gin.Context) {
 
 	entrada, err := h.service.GetByID(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, models.APIError{Error: "NOT_FOUND", Message: "Entrada no encontrada"})
+		if errors.Is(err, apperrors.ErrNotFound) {
+			c.JSON(http.StatusNotFound, models.APIError{Error: "NOT_FOUND", Message: "Entrada no encontrada"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.APIError{Error: "INTERNAL_ERROR", Message: err.Error()})
 		return
 	}
 

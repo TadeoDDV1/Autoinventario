@@ -1,5 +1,7 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../../core/format/money.dart';
 import '../../models/producto.dart';
 
 class ProductoCard extends StatelessWidget {
@@ -73,10 +75,20 @@ class ProductoCard extends StatelessWidget {
                       width: 100,
                       height: double.infinity,
                       margin: const EdgeInsets.only(left: 1),
-                      child: Image.network(
-                        producto.imagenUrl!,
+                      child: CachedNetworkImage(
+                        imageUrl: producto.imagenUrl!,
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
+                        placeholder: (context, url) => Container(
+                          color: theme.colorScheme.surfaceContainerHighest,
+                          child: const Center(
+                            child: SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Container(
                           color: theme.colorScheme.surfaceContainerHighest,
                           child: Icon(
                             Icons.image_not_supported,
@@ -173,7 +185,7 @@ class ProductoCard extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    '\$${producto.precioVenta.toStringAsFixed(2)}',
+                                    money.format(producto.precioVenta),
                                     style: theme.textTheme.titleMedium
                                         ?.copyWith(
                                           color: theme.colorScheme.primary,

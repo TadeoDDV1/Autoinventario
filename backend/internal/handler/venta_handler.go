@@ -1,14 +1,16 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
+	"github.com/ferreteria/backend/internal/apperrors"
 	"github.com/ferreteria/backend/internal/models"
 	"github.com/ferreteria/backend/internal/service"
+	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 )
 
 type VentaHandler struct {
@@ -37,7 +39,7 @@ func (h *VentaHandler) Create(c *gin.Context) {
 
 	id, folio, err := h.service.Create(&req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.APIError{Error: "INTERNAL_ERROR", Message: "Error al crear venta"})
+		respondError(c, err, http.StatusInternalServerError, "INTERNAL_ERROR", "Error al crear venta: "+err.Error())
 		return
 	}
 
@@ -77,7 +79,11 @@ func (h *VentaHandler) GetByID(c *gin.Context) {
 
 	venta, err := h.service.GetByID(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, models.APIError{Error: "NOT_FOUND", Message: "Venta no encontrada"})
+		if errors.Is(err, apperrors.ErrNotFound) {
+			c.JSON(http.StatusNotFound, models.APIError{Error: "NOT_FOUND", Message: "Venta no encontrada"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.APIError{Error: "INTERNAL_ERROR", Message: err.Error()})
 		return
 	}
 

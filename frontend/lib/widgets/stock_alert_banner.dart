@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../models/producto.dart';
 import '../providers/producto_provider.dart';
-import '../providers/venta_provider.dart';
 
 class StockAlertBanner extends ConsumerWidget {
   const StockAlertBanner({super.key});
@@ -30,7 +29,7 @@ class StockAlertBanner extends ConsumerWidget {
           child: Material(
             color: Colors.transparent,
             child: InkWell(
-              onTap: () => context.go('/inventario?filter=low-stock'),
+              onTap: () => context.go('/inventario'),
               borderRadius: BorderRadius.circular(12),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -83,7 +82,7 @@ class StockAlertBanner extends ConsumerWidget {
         );
       },
       loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
     );
   }
 }
@@ -95,6 +94,6 @@ final stockAlertCountProvider = Provider<int>((ref) {
         .where((p) => p.stockLevel == StockLevel.outOfStock || p.stockLevel == StockLevel.low)
         .length,
     loading: () => 0,
-    error: (_, __) => 0,
+    error: (_, _) => 0,
   );
 });

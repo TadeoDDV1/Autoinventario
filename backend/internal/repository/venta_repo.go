@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jmoiron/sqlx"
+	"github.com/ferreteria/backend/internal/apperrors"
 	"github.com/ferreteria/backend/internal/models"
+	"github.com/jmoiron/sqlx"
 )
 
 type VentaRepository struct {
@@ -17,7 +18,7 @@ func NewVentaRepository(db *sqlx.DB) *VentaRepository {
 }
 
 func (r *VentaRepository) Create(venta *models.VentaCreate) (int64, string, error) {
-	folio := fmt.Sprintf("V-%d", time.Now().UnixMilli())
+	folio := fmt.Sprintf("V-%d", time.Now().UnixNano())
 
 	tx, err := r.db.Beginx()
 	if err != nil {
@@ -41,16 +42,29 @@ func (r *VentaRepository) Create(venta *models.VentaCreate) (int64, string, erro
 	}
 
 	for _, detalle := range venta.Detalles {
+		var stockActual int
+		var nombre string
+		err = tx.QueryRowx(
+			"SELECT stock_actual, nombre FROM productos WHERE id = ? FOR UPDATE",
+			detalle.ProductoID,
+		).Scan(&stockActual, &nombre)
+		if err != nil {
+			return 0, "", apperrors.NewNotFound("producto", detalle.ProductoID)
+		}
+		if stockActual < detalle.Cantidad {
+			return 0, "", apperrors.NewStockError(
+				detalle.ProductoID, stockActual, detalle.Cantidad, nombre,
+			)
+		}
+
 		query = `INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio_unitario, subtotal)
 			VALUES (?, ?, ?, ?, ?)`
-		_, err := tx.Exec(query, ventaID, detalle.ProductoID, detalle.Cantidad, detalle.PrecioUnitario, detalle.Subtotal)
-		if err != nil {
+		if _, err := tx.Exec(query, ventaID, detalle.ProductoID, detalle.Cantidad, detalle.PrecioUnitario, detalle.Subtotal); err != nil {
 			return 0, "", err
 		}
 
 		query = `UPDATE productos SET stock_actual = stock_actual - ? WHERE id = ?`
-		_, err = tx.Exec(query, detalle.Cantidad, detalle.ProductoID)
-		if err != nil {
+		if _, err = tx.Exec(query, detalle.Cantidad, detalle.ProductoID); err != nil {
 			return 0, "", err
 		}
 	}
@@ -64,33 +78,23 @@ func (r *VentaRepository) Create(venta *models.VentaCreate) (int64, string, erro
 
 func (r *VentaRepository) GetAll(page, pageSize int) ([]models.Venta, int64, error) {
 	var total int64
-	countQuery := "SELECT COUNT(*) FROM ventas"
-	if err := r.db.Get(&total, countQuery); err != nil {
+	if err := r.db.Get(&total, "SELECT COUNT(*) FROM ventas"); err != nil {
 		return nil, 0, err
 	}
 
 	offset := (page - 1) * pageSize
-	query := `SELECT v.*, GROUP_CONCAT(CONCAT(d.producto_id, ':', d.cantidad, ':', d.precio_unitario, ':', d.subtotal) ORDER BY d.id SEPARATOR ',') as detalles_raw
-		FROM ventas v
-		LEFT JOIN detalle_ventas d ON v.id = d.venta_id
-		GROUP BY v.id
-		ORDER BY v.created_at DESC
+	query := `SELECT id, folio, subtotal, iva, total, metodo_pago, monto_recibido, cambio, created_at
+		FROM ventas
+		ORDER BY created_at DESC
 		LIMIT ? OFFSET ?`
 
-	rows, err := r.db.Queryx(query, pageSize, offset)
-	if err != nil {
+	ventas := make([]models.Venta, 0)
+	if err := r.db.Select(&ventas, query, pageSize, offset); err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
 
-	ventas := make([]models.Venta, 0)
-	for rows.Next() {
-		var v models.Venta
-		var detallesRaw *string
-		if err := rows.Scan(&v.ID, &v.Folio, &v.Subtotal, &v.Iva, &v.Total, &v.MetodoPago, &v.MontoRecibido, &v.Cambio, &v.CreatedAt, &detallesRaw); err != nil {
-			return nil, 0, err
-		}
-		ventas = append(ventas, v)
+	if err := r.hydrateDetalles(ventas); err != nil {
+		return nil, 0, err
 	}
 
 	return ventas, total, nil
@@ -98,16 +102,15 @@ func (r *VentaRepository) GetAll(page, pageSize int) ([]models.Venta, int64, err
 
 func (r *VentaRepository) GetByID(id int) (*models.Venta, error) {
 	var venta models.Venta
-	query := `SELECT v.* FROM ventas v WHERE v.id = ?`
-	if err := r.db.Get(&venta, query, id); err != nil {
-		return nil, err
+	if err := r.db.Get(&venta, "SELECT v.* FROM ventas v WHERE v.id = ?", id); err != nil {
+		return nil, apperrors.NewNotFound("venta", id)
 	}
 
+	detalles := make([]models.DetalleVenta, 0)
 	detalleQuery := `SELECT d.*, p.nombre as nombre_producto
 		FROM detalle_ventas d
 		JOIN productos p ON d.producto_id = p.id
 		WHERE d.venta_id = ?`
-	detalles := make([]models.DetalleVenta, 0)
 	if err := r.db.Select(&detalles, detalleQuery, id); err != nil {
 		return nil, err
 	}
@@ -123,17 +126,46 @@ func (r *VentaRepository) GetByFecha(fecha time.Time) ([]models.Venta, error) {
 		return nil, err
 	}
 
-	for i := range ventas {
-		detalleQuery := `SELECT d.*, p.nombre as nombre_producto
-			FROM detalle_ventas d
-			JOIN productos p ON d.producto_id = p.id
-			WHERE d.venta_id = ?`
-		detalles := make([]models.DetalleVenta, 0)
-		r.db.Select(&detalles, detalleQuery, ventas[i].ID)
-		ventas[i].Detalles = detalles
+	if err := r.hydrateDetalles(ventas); err != nil {
+		return nil, err
 	}
 
 	return ventas, nil
+}
+
+func (r *VentaRepository) hydrateDetalles(ventas []models.Venta) error {
+	if len(ventas) == 0 {
+		return nil
+	}
+	ids := make([]int, len(ventas))
+	for i, v := range ventas {
+		ids[i] = v.ID
+	}
+	detalleQuery := `SELECT d.id, d.venta_id, d.producto_id, d.cantidad, d.precio_unitario, d.subtotal, p.nombre as nombre_producto
+		FROM detalle_ventas d
+		JOIN productos p ON d.producto_id = p.id
+		WHERE d.venta_id IN (?)`
+	q, args, err := sqlx.In(detalleQuery, ids)
+	if err != nil {
+		return err
+	}
+	q = r.db.Rebind(q)
+	var allDetalles []models.DetalleVenta
+	if err := r.db.Select(&allDetalles, q, args...); err != nil {
+		return err
+	}
+	byVenta := make(map[int][]models.DetalleVenta, len(ventas))
+	for _, d := range allDetalles {
+		byVenta[d.VentaID] = append(byVenta[d.VentaID], d)
+	}
+	for i := range ventas {
+		detalles := byVenta[ventas[i].ID]
+		if detalles == nil {
+			detalles = []models.DetalleVenta{}
+		}
+		ventas[i].Detalles = detalles
+	}
+	return nil
 }
 
 func (r *VentaRepository) GetTotalesFecha(fecha time.Time) (float64, float64, float64, error) {

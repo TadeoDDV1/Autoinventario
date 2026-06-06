@@ -1,3 +1,5 @@
+export '../domain/enums.dart' show MetodoPago;
+
 class DetalleVenta {
   final int productoId;
   final String nombreProducto;
@@ -95,5 +97,3 @@ class Venta {
     };
   }
 }
-
-enum MetodoPago { efectivo, tarjeta }
