@@ -9,6 +9,7 @@ import '../../providers/producto_provider.dart';
 import '../../providers/venta_provider.dart';
 import '../../widgets/caja/barcode_input.dart';
 import '../../widgets/caja/quick_cart_summary.dart';
+import '../../widgets/ia/copilot_panel.dart';
 
 class _ClearCartIntent extends Intent {
   const _ClearCartIntent();
@@ -16,6 +17,14 @@ class _ClearCartIntent extends Intent {
 
 class _GoInventarioIntent extends Intent {
   const _GoInventarioIntent();
+}
+
+class _GoCajaIntent extends Intent {
+  const _GoCajaIntent();
+}
+
+class _FocusInputIntent extends Intent {
+  const _FocusInputIntent();
 }
 
 class CajaScreen extends ConsumerStatefulWidget {
@@ -26,6 +35,24 @@ class CajaScreen extends ConsumerStatefulWidget {
 }
 
 class _CajaScreenState extends ConsumerState<CajaScreen> {
+  final FocusNode _shortcutFocus = FocusNode(debugLabel: 'CajaShortcuts');
+  final FocusNode _inputFocus = FocusNode(debugLabel: 'CajaBarcodeInput');
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _shortcutFocus.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _shortcutFocus.dispose();
+    _inputFocus.dispose();
+    super.dispose();
+  }
+
   void _onProductoScan(dynamic producto) {
     ref.read(carritoProvider.notifier).agregarProducto(producto);
     _showSnackBar('${producto.nombre} agregado ✓', Colors.green);
@@ -58,6 +85,9 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
         SingleActivator(LogicalKeyboardKey.escape): _ClearCartIntent(),
         SingleActivator(LogicalKeyboardKey.keyI, control: true):
             _GoInventarioIntent(),
+        SingleActivator(LogicalKeyboardKey.keyC, control: true):
+            _GoCajaIntent(),
+        SingleActivator(LogicalKeyboardKey.f1): _FocusInputIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
@@ -77,8 +107,21 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
               return null;
             },
           ),
+          _GoCajaIntent: CallbackAction<_GoCajaIntent>(
+            onInvoke: (_) {
+              context.go('/caja');
+              return null;
+            },
+          ),
+          _FocusInputIntent: CallbackAction<_FocusInputIntent>(
+            onInvoke: (_) {
+              _inputFocus.requestFocus();
+              return null;
+            },
+          ),
         },
         child: Focus(
+          focusNode: _shortcutFocus,
           autofocus: true,
           child: _buildScaffold(theme, productosAsync, carritoCantidad),
         ),
@@ -218,8 +261,12 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
           child: BarcodeInput(
             onProductoEncontrado: _onProductoScan,
             onError: _onScanError,
+            externalFocusNode: _inputFocus,
           ),
         ),
+
+        // Panel de sugerencias IA — aparece cuando hay items en el carrito
+        const CopilotPanel(),
 
         // Lista de productos escaneados en esta sesión
         Expanded(

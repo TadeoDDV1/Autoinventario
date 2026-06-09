@@ -19,11 +19,15 @@ import 'barcode_scanner_button.dart';
 class BarcodeInput extends ConsumerStatefulWidget {
   final Function(Producto producto) onProductoEncontrado;
   final Function(String mensaje) onError;
+  /// FocusNode externo opcional para que atajos de teclado (F1)
+  /// puedan enfocar este input desde fuera.
+  final FocusNode? externalFocusNode;
 
   const BarcodeInput({
     super.key,
     required this.onProductoEncontrado,
     required this.onError,
+    this.externalFocusNode,
   });
 
   @override
@@ -32,7 +36,7 @@ class BarcodeInput extends ConsumerStatefulWidget {
 
 class _BarcodeInputState extends ConsumerState<BarcodeInput> {
   final _controller = TextEditingController();
-  final _focusNode = FocusNode();
+  late final FocusNode _focusNode;
   Timer? _debounce;
   bool _isLoading = false;
   List<Producto> _results = [];
@@ -52,10 +56,11 @@ class _BarcodeInputState extends ConsumerState<BarcodeInput> {
   @override
   void initState() {
     super.initState();
+    _focusNode = widget.externalFocusNode ?? FocusNode();
     // Solo autofocus en desktop (en móvil abre el teclado y estorba)
     if (!_esMovil) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _focusNode.requestFocus();
+        if (mounted) _focusNode.requestFocus();
       });
     }
   }
@@ -65,7 +70,9 @@ class _BarcodeInputState extends ConsumerState<BarcodeInput> {
     _debounce?.cancel();
     _hideTimer?.cancel();
     _controller.dispose();
-    _focusNode.dispose();
+    if (widget.externalFocusNode == null) {
+      _focusNode.dispose();
+    }
     super.dispose();
   }
 

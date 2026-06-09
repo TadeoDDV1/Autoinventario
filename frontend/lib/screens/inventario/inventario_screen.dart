@@ -80,6 +80,15 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
               ),
             ),
             actions: [
+              IconButton(
+                onPressed: () => context.go('/inventario/predicciones'),
+                icon: const Icon(Icons.auto_graph),
+                tooltip: 'Análisis predictivo (IA)',
+                style: IconButton.styleFrom(
+                  backgroundColor: theme.colorScheme.primaryContainer,
+                ),
+              ),
+              const SizedBox(width: 8),
               FilledButton.icon(
                 onPressed: () => context.go('/inventario/nuevo'),
                 icon: const Icon(Icons.add),

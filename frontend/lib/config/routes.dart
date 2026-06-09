@@ -6,10 +6,13 @@ import '../domain/enums.dart';
 import '../models/venta.dart';
 import '../providers/theme_provider.dart';
 import '../screens/caja/caja_screen.dart';
+import '../screens/dashboard/dashboard_screen.dart';
 import '../screens/ventas/ticket_screen.dart';
 import '../screens/ventas/historial_ventas_screen.dart';
 import '../screens/inventario/inventario_screen.dart';
+import '../screens/inventario/predicciones_screen.dart';
 import '../screens/inventario/producto_form_screen.dart';
+import '../widgets/conectividad_badge.dart';
 import '../widgets/stock_alert_banner.dart';
 import '../providers/modo_provider.dart';
 
@@ -19,7 +22,7 @@ final _shellNavigatorKey = GlobalKey<NavigatorState>();
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
-    initialLocation: '/caja',
+    initialLocation: '/dashboard',
     routes: [
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
@@ -27,6 +30,13 @@ final routerProvider = Provider<GoRouter>((ref) {
           return AppShell(child: child);
         },
         routes: [
+          // Dashboard (inicio)
+          GoRoute(
+            path: '/dashboard',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: DashboardScreen(),
+            ),
+          ),
           // Modo Caja
           GoRoute(
             path: '/caja',
@@ -56,6 +66,12 @@ final routerProvider = Provider<GoRouter>((ref) {
               child: InventarioScreen(),
             ),
             routes: [
+              GoRoute(
+                path: 'predicciones',
+                pageBuilder: (context, state) => const NoTransitionPage(
+                  child: PrediccionesScreen(),
+                ),
+              ),
               GoRoute(
                 path: 'nuevo',
                 parentNavigatorKey: _rootNavigatorKey,
@@ -89,17 +105,22 @@ class AppShell extends ConsumerStatefulWidget {
 class _AppShellState extends ConsumerState<AppShell> {
   int _getSelectedIndex(BuildContext context) {
     final location = GoRouterState.of(context).uri.toString();
-    if (location.startsWith('/inventario')) return 1;
+    if (location.startsWith('/inventario')) return 2;
+    if (location.startsWith('/caja')) return 1;
     return 0;
   }
 
   void _onDestinationSelected(int index) {
     switch (index) {
       case 0:
-        context.go('/caja');
+        context.go('/dashboard');
         ref.read(modoAppProvider.notifier).setModo(ModoApp.caja);
         break;
       case 1:
+        context.go('/caja');
+        ref.read(modoAppProvider.notifier).setModo(ModoApp.caja);
+        break;
+      case 2:
         context.go('/inventario');
         ref.read(modoAppProvider.notifier).setModo(ModoApp.inventario);
         break;
@@ -115,6 +136,11 @@ class _AppShellState extends ConsumerState<AppShell> {
     final stockAlertCount = ref.watch(stockAlertCountProvider);
 
     final destinations = [
+      NavigationDestination(
+        icon: const Icon(Icons.dashboard_outlined),
+        selectedIcon: const Icon(Icons.dashboard),
+        label: 'Inicio',
+      ),
       NavigationDestination(
         icon: const Icon(Icons.point_of_sale_outlined),
         selectedIcon: const Icon(Icons.point_of_sale),
@@ -180,10 +206,16 @@ class _AppShellState extends ConsumerState<AppShell> {
           Expanded(
             child: Column(
               children: [
+                // Banner superior: alertas de stock (móvil) + estado de conexión
                 if (!isWide && stockAlertCount > 0)
                   const Padding(
                     padding: EdgeInsets.only(top: 8),
                     child: StockAlertBanner(),
+                  ),
+                if (!isWide)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: ConectividadBadge(),
                   ),
                 Expanded(child: widget.child),
               ],
@@ -193,10 +225,16 @@ class _AppShellState extends ConsumerState<AppShell> {
       ),
       bottomNavigationBar: isWide
           ? null
-          : NavigationBar(
-              selectedIndex: selectedIndex,
-              onDestinationSelected: _onDestinationSelected,
-              destinations: destinations,
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (stockAlertCount == 0) const ConectividadBadge(),
+                NavigationBar(
+                  selectedIndex: selectedIndex,
+                  onDestinationSelected: _onDestinationSelected,
+                  destinations: destinations,
+                ),
+              ],
             ),
     );
   }

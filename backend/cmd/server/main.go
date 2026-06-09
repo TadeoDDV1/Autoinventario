@@ -14,6 +14,7 @@ import (
 
 	"github.com/ferreteria/backend/config"
 	"github.com/ferreteria/backend/internal/handler"
+	"github.com/ferreteria/backend/internal/ia"
 	"github.com/ferreteria/backend/internal/repository"
 	"github.com/ferreteria/backend/internal/router"
 	"github.com/ferreteria/backend/internal/service"
@@ -44,7 +45,10 @@ func main() {
 	entradaService := service.NewEntradaService(entradaRepo)
 	entradaHandler := handler.NewEntradaHandler(entradaService)
 
-	r := router.SetupRouter(productoHandler, ventaHandler, entradaHandler)
+	iaHandler := ia.NewHandler(db)
+	syncHandler := ia.NewSyncHandler(ventaService)
+
+	r := router.SetupRouter(productoHandler, ventaHandler, entradaHandler, iaHandler, syncHandler)
 
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {

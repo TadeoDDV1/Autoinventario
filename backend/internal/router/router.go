@@ -8,12 +8,13 @@ import (
 	"time"
 
 	"github.com/ferreteria/backend/internal/handler"
+	"github.com/ferreteria/backend/internal/ia"
 	"github.com/gin-gonic/gin"
 )
 
 const RequestIDHeader = "X-Request-ID"
 
-func SetupRouter(productoHandler *handler.ProductoHandler, ventaHandler *handler.VentaHandler, entradaHandler *handler.EntradaHandler) *gin.Engine {
+func SetupRouter(productoHandler *handler.ProductoHandler, ventaHandler *handler.VentaHandler, entradaHandler *handler.EntradaHandler, iaHandler *ia.Handler, syncHandler *ia.SyncHandler) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -61,6 +62,19 @@ func SetupRouter(productoHandler *handler.ProductoHandler, ventaHandler *handler
 			entradas.GET("/:id", entradaHandler.GetByID)
 			entradas.POST("", entradaHandler.Create)
 		}
+
+		// IA: copilot + dashboard
+		ia := api.Group("/ia")
+		{
+			ia.GET("/sugerencias", iaHandler.GetSugerencias)
+			ia.GET("/inventario/predicciones", iaHandler.GetPredicciones)
+		}
+
+		// Dashboard ejecutivo
+		api.GET("/dashboard/resumen", iaHandler.GetDashboard)
+
+		// Sync batch (ventas offline)
+		api.POST("/sync/ventas", syncHandler.SyncVentas)
 	}
 
 	return r
