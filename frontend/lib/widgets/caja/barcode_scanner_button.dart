@@ -65,12 +65,14 @@ class BarcodeScannerButton extends ConsumerWidget {
       if (producto != null) {
         onProductoEncontrado(producto);
       } else {
-        onError('Producto no encontrado: $codigo');
+        onError('Producto no encontrado: "$codigo" — '
+            'verifica que esté dado de alta en inventario');
       }
     } on ApiException catch (e) {
-      onError('Error al buscar: ${e.message}');
+      onError('Sin conexión al servidor (${e.message}). '
+          'Revisa la red o inténtalo de nuevo.');
     } catch (e) {
-      onError('Error al buscar: $e');
+      onError('Error inesperado al buscar: $e');
     }
   }
 }
@@ -85,6 +87,7 @@ class _BarcodeScannerSheet extends StatefulWidget {
 class _BarcodeScannerSheetState extends State<_BarcodeScannerSheet> {
   late final MobileScannerController _controller;
   bool _procesando = false;
+  bool _disposed = false;
 
   @override
   void initState() {
@@ -98,19 +101,28 @@ class _BarcodeScannerSheetState extends State<_BarcodeScannerSheet> {
 
   @override
   void dispose() {
+    _disposed = true;
+    try {
+      _controller.stop();
+    } catch (_) {}
     _controller.dispose();
     super.dispose();
   }
 
   void _onDetect(BarcodeCapture capture) {
+    if (_disposed) return;
     if (_procesando) return;
     final barcode = capture.barcodes.firstOrNull;
     final value = barcode?.rawValue;
     if (value == null || value.isEmpty) return;
 
     setState(() => _procesando = true);
-    _controller.stop();
-    Navigator.of(context).pop(value);
+    try {
+      _controller.stop();
+    } catch (_) {}
+    if (mounted) {
+      Navigator.of(context).pop(value);
+    }
   }
 
   @override

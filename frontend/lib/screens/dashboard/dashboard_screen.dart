@@ -76,6 +76,11 @@ class DashboardScreen extends ConsumerWidget {
             ),
             const Spacer(),
             IconButton(
+              onPressed: () => context.push('/chat'),
+              icon: const Icon(Icons.chat_bubble_outline),
+              tooltip: 'Asistente ejecutivo',
+            ),
+            IconButton(
               onPressed: () => ref.invalidate(dashboardProvider),
               icon: const Icon(Icons.refresh),
               tooltip: 'Actualizar',

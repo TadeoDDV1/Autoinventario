@@ -5,6 +5,7 @@ import '../core/layout/breakpoints.dart';
 import '../domain/enums.dart';
 import '../models/venta.dart';
 import '../providers/theme_provider.dart';
+import '../screens/chat/chat_screen.dart';
 import '../screens/caja/caja_screen.dart';
 import '../screens/dashboard/dashboard_screen.dart';
 import '../screens/ventas/ticket_screen.dart';
@@ -88,6 +89,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
+      ),
+      // Chat ejecutivo (full-screen, fuera del shell)
+      GoRoute(
+        path: '/chat',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const ChatScreen(),
       ),
     ],
   );

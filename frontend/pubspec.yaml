@@ -46,6 +46,10 @@ dependencies:
   mobile_scanner: ^5.2.3
   cached_network_image: ^3.4.1
   shimmer: ^3.0.0
+  # PDF y impresión de tickets
+  pdf: ^3.11.3
+  printing: ^5.14.2
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:

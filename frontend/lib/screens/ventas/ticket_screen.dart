@@ -3,11 +3,53 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/format/money.dart';
 import '../../models/venta.dart';
+import '../../services/ticket_pdf_service.dart';
 
 class TicketScreen extends StatelessWidget {
   final Venta venta;
 
   const TicketScreen({super.key, required this.venta});
+
+  Future<void> _imprimir(BuildContext context, Venta v) async {
+    try {
+      await TicketPdfService.imprimir(v);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al imprimir: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _compartir(BuildContext context, Venta v) async {
+    try {
+      await TicketPdfService.compartir(v);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al compartir: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _guardar(BuildContext context, Venta v) async {
+    try {
+      final file = await TicketPdfService.guardarPdf(v);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF guardado: ${file.path}')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al guardar: $e')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,6 +61,23 @@ class TicketScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Ticket'),
         automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            tooltip: 'Imprimir ticket',
+            icon: const Icon(Icons.print),
+            onPressed: () => _imprimir(context, venta),
+          ),
+          IconButton(
+            tooltip: 'Compartir PDF',
+            icon: const Icon(Icons.share),
+            onPressed: () => _compartir(context, venta),
+          ),
+          IconButton(
+            tooltip: 'Guardar PDF',
+            icon: const Icon(Icons.save_alt),
+            onPressed: () => _guardar(context, venta),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -66,36 +125,37 @@ class TicketScreen extends StatelessWidget {
                   const Divider(),
                   const SizedBox(height: 16),
                   ...venta.detalles.map((detalle) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                detalle.nombreProducto,
-                                style: theme.textTheme.bodyMedium,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    detalle.nombreProducto,
+                                    style: theme.textTheme.bodyMedium,
+                                  ),
+                                  Text(
+                                    '${formatter.format(detalle.precioUnitario)} x ${detalle.cantidad}',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color:
+                                          theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              Text(
-                                '${formatter.format(detalle.precioUnitario)} x ${detalle.cantidad}',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
+                            ),
+                            Text(
+                              formatter.format(detalle.subtotal),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w500,
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                        Text(
-                          formatter.format(detalle.subtotal),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )),
+                      )),
                   const SizedBox(height: 16),
                   const Divider(),
                   const SizedBox(height: 16),
@@ -146,7 +206,8 @@ class TicketScreen extends StatelessWidget {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Método de pago', style: theme.textTheme.bodySmall),
+                            Text('Método de pago',
+                                style: theme.textTheme.bodySmall),
                             Text(
                               MetodoPago.fromString(venta.metodoPago).label,
                               style: theme.textTheme.bodySmall?.copyWith(
@@ -160,7 +221,8 @@ class TicketScreen extends StatelessWidget {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('Monto recibido', style: theme.textTheme.bodySmall),
+                              Text('Monto recibido',
+                                  style: theme.textTheme.bodySmall),
                               Text(formatter.format(venta.montoRecibido)),
                             ],
                           ),

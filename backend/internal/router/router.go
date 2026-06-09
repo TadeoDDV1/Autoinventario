@@ -22,14 +22,16 @@ func SetupRouter(productoHandler *handler.ProductoHandler, ventaHandler *handler
 	r.Use(loggingMiddleware())
 	r.Use(corsMiddleware())
 
-	r.GET("/health", func(c *gin.Context) {
+	healthHandler := func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":    "ok",
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
 		})
-	})
+	}
+	r.GET("/health", healthHandler)
 
 	api := r.Group("/api/v1")
+	api.GET("/health", healthHandler)
 	{
 		productos := api.Group("/productos")
 		{
