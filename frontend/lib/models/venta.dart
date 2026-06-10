@@ -17,11 +17,11 @@ class DetalleVenta {
 
   factory DetalleVenta.fromJson(Map<String, dynamic> json) {
     return DetalleVenta(
-      productoId: json['producto_id'] as int,
-      nombreProducto: json['nombre_producto'] as String,
-      precioUnitario: (json['precio_unitario'] as num).toDouble(),
-      cantidad: json['cantidad'] as int,
-      subtotal: (json['subtotal'] as num).toDouble(),
+      productoId: (json['producto_id'] as num?)?.toInt() ?? 0,
+      nombreProducto: (json['nombre_producto'] as String?) ?? 'Producto',
+      precioUnitario: (json['precio_unitario'] as num?)?.toDouble() ?? 0.0,
+      cantidad: (json['cantidad'] as num?)?.toInt() ?? 0,
+      subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
@@ -62,26 +62,31 @@ class Venta {
   });
 
   factory Venta.fromJson(Map<String, dynamic> json) {
+    // El backend devuelve 'created_at' (de MySQL), pero por compat también
+    // aceptamos 'fecha' como fallback.
+    DateTime? parseFecha(dynamic v) {
+      if (v == null) return null;
+      try {
+        return DateTime.parse(v as String);
+      } catch (_) {
+        return null;
+      }
+    }
+
     return Venta(
-      id: json['id'] as int?,
+      id: (json['id'] as num?)?.toInt(),
       folio: json['folio'] as String?,
       detalles: (json['detalles'] as List<dynamic>?)
               ?.map((d) => DetalleVenta.fromJson(d as Map<String, dynamic>))
               .toList() ??
-          [],
-      subtotal: (json['subtotal'] as num).toDouble(),
-      iva: (json['iva'] as num).toDouble(),
-      total: (json['total'] as num).toDouble(),
-      metodoPago: json['metodo_pago'] as String,
-      montoRecibido: json['monto_recibido'] != null
-          ? (json['monto_recibido'] as num).toDouble()
-          : null,
-      cambio: json['cambio'] != null
-          ? (json['cambio'] as num).toDouble()
-          : null,
-      fecha: json['fecha'] != null
-          ? DateTime.parse(json['fecha'] as String)
-          : null,
+          const <DetalleVenta>[],
+      subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0.0,
+      iva: (json['iva'] as num?)?.toDouble() ?? 0.0,
+      total: (json['total'] as num?)?.toDouble() ?? 0.0,
+      metodoPago: (json['metodo_pago'] as String?) ?? 'efectivo',
+      montoRecibido: (json['monto_recibido'] as num?)?.toDouble(),
+      cambio: (json['cambio'] as num?)?.toDouble(),
+      fecha: parseFecha(json['created_at']) ?? parseFecha(json['fecha']),
     );
   }
 

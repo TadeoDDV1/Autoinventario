@@ -85,6 +85,18 @@ class ApiService {
     });
   }
 
+  /// Llama a /productos/escanear?codigo=XXX.
+  /// Devuelve [EscanearResult] con {existe, producto?, codigo}.
+  Future<EscanearResult> escanearProducto(String codigo) async {
+    return _request(() async {
+      final response = await _dio.get(
+        '/productos/escanear',
+        queryParameters: {'codigo': codigo},
+      );
+      return EscanearResult.fromJson(response.data as Map<String, dynamic>);
+    });
+  }
+
   Future<void> ajustarStock(int id, int cantidad) async {
     return _request(() async {
       await _dio.patch(
@@ -153,5 +165,23 @@ class ApiService {
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }
+  }
+}
+
+class EscanearResult {
+  final bool existe;
+  final Producto? producto;
+  final String? codigo;
+
+  EscanearResult({required this.existe, this.producto, this.codigo});
+
+  factory EscanearResult.fromJson(Map<String, dynamic> json) {
+    return EscanearResult(
+      existe: (json['existe'] as bool?) ?? false,
+      producto: json['producto'] != null
+          ? Producto.fromJson(json['producto'] as Map<String, dynamic>)
+          : null,
+      codigo: json['codigo'] as String?,
+    );
   }
 }

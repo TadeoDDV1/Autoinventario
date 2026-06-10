@@ -119,3 +119,67 @@ func buildSugerenciaPrompt(carrito []string, sugerido string) string {
 	return fmt.Sprintf("El cliente lleva: %s. ¿Por qué debería ofrecerle '%s' también? Una razón breve y útil (máx 12 palabras).",
 		strings.Join(carrito, ", "), sugerido)
 }
+
+// refinarChatConLLM toma el mensaje del usuario y la respuesta base (reglas)
+// y pide al LLM que la reescriba en lenguaje natural más amigable.
+// Si falla, retorna "" y el caller usa la respuesta de reglas.
+func (cs *CopilotService) refinarChatConLLM(ctx context.Context, mensajeUsuario, respuestaBase string) (string, error) {
+	if cs.llmClient == nil || !cs.llmClient.Disponible() {
+		return "", fmt.Errorf("llm no disponible")
+	}
+
+	system := "Eres un asistente de punto de venta para una ferretería. Responde en español, conciso y directo. Mantén los productos mencionados y los datos clave (precios, cantidades) tal cual."
+
+	userPrompt := fmt.Sprintf(
+		"El vendedor preguntó: \"%s\"\n\nMi respuesta basada en reglas es:\n%s\n\nReescríbela en lenguaje natural más amigable, en español, sin perder información importante. Si hay productos en la lista, mantenlos. Máximo 200 palabras.",
+		mensajeUsuario, respuestaBase,
+	)
+
+	body := map[string]interface{}{
+		"model": cs.llmClient.model,
+		"messages": []map[string]string{
+			{"role": "system", "content": system},
+			{"role": "user", "content": userPrompt},
+		},
+		"max_tokens":  300,
+		"temperature": 0.4,
+	}
+
+	jsonBody, _ := json.Marshal(body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cs.llmClient.baseURL+"/chat/completions", bytes.NewReader(jsonBody))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+cs.llmClient.apiKey)
+
+	resp, err := cs.llmClient.http.Do(req)
+	if err != nil {
+		slog.Warn("llm_chat_refine_failed", slog.Any("error", err))
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		raw, _ := io.ReadAll(resp.Body)
+		slog.Warn("llm_chat_refine_error_status", slog.Int("status", resp.StatusCode), slog.String("body", string(raw)))
+		return "", fmt.Errorf("status %d", resp.StatusCode)
+	}
+
+	var parsed struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return "", err
+	}
+	if len(parsed.Choices) == 0 {
+		return "", fmt.Errorf("respuesta vacía")
+	}
+
+	out := strings.TrimSpace(parsed.Choices[0].Message.Content)
+	return out, nil
+}

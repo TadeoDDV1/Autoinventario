@@ -1,26 +1,79 @@
-import 'package:intl/intl.dart';
-import '../config/api_config.dart';
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../config/api_config.dart';
+import '../models/sugerencia.dart';
 
 /// Servicio de chat ejecutivo.
-/// Interpreta preguntas en lenguaje natural y consulta la BD del backend
-/// para devolver respuestas con datos reales.
-/// Funciona 100% local con regex (no requiere LLM externo).
+///
+/// v2: Usa el endpoint `/api/v1/ia/chat` que es conversacional con detección
+/// de intención en lenguaje natural. Mantiene compatibilidad con el modo
+/// "datos de negocio" como fallback si el chat IA no está disponible.
+///
+/// Historial de conversaciones: las últimas 20 se guardan en
+/// shared_preferences (key: `chat_historial`).
 class ChatEjecutivoService {
   final Dio _dio;
-  final NumberFormat _money;
+  static const _historialKey = 'chat_historial';
+  static const _maxConversaciones = 20;
 
   ChatEjecutivoService({Dio? dio})
       : _dio = dio ??
             Dio(BaseOptions(
               baseUrl: apiBaseUrl,
               connectTimeout: const Duration(seconds: 8),
-              receiveTimeout: const Duration(seconds: 8),
-            )),
-        _money = NumberFormat.currency(
-            locale: 'es_MX', symbol: r'$', decimalDigits: 2);
+              receiveTimeout: const Duration(seconds: 12),
+            ));
 
-  Future<ChatRespuesta> enviar(String mensaje) async {
+  /// Envía un mensaje al chat IA conversacional.
+  ///
+  /// [historial] son los últimos N mensajes previos para mantener contexto.
+  /// [carritoIds] son los IDs de productos actualmente en el carrito.
+  Future<ChatRespuesta> enviarConversacional(
+    String mensaje, {
+    List<ChatMensaje> historial = const [],
+    List<int> carritoIds = const [],
+  }) async {
+    try {
+      final resp = await _dio.post(
+        '/ia/chat',
+        data: {
+          'mensaje': mensaje,
+          'historial': historial
+              .map((m) => {'rol': m.esUsuario ? 'user' : 'assistant', 'texto': m.texto})
+              .toList(),
+          'carrito_ids': carritoIds,
+        },
+      );
+      final data = resp.data as Map<String, dynamic>;
+      final sugs = (data['sugerencias'] as List<dynamic>?)
+              ?.map((s) => Sugerencia.fromJson(s as Map<String, dynamic>))
+              .toList() ??
+          const <Sugerencia>[];
+
+      return ChatRespuesta(
+        texto: (data['texto'] as String?) ?? '',
+        tipo: ChatTipo.texto,
+        sugerencias: sugs,
+        fuente: (data['fuente'] as String?) ?? 'desconocido',
+        intencion: (data['intencion'] as String?) ?? '',
+      );
+    } on DioException catch (e) {
+      // Si falla el chat, intentar con el modo datos de negocio
+      return await enviarFallbackNegocio(mensaje, e);
+    } catch (e) {
+      return ChatRespuesta(
+        texto: 'Error: $e',
+        tipo: ChatTipo.texto,
+      );
+    }
+  }
+
+  /// Fallback: si el chat IA falla, responder con datos de negocio directos.
+  Future<ChatRespuesta> enviarFallbackNegocio(String mensaje, Object? causa) async {
     final lower = mensaje.toLowerCase().trim();
     if (lower.isEmpty) {
       return ChatRespuesta(
@@ -29,45 +82,7 @@ class ChatEjecutivoService {
         tipo: ChatTipo.texto,
       );
     }
-
-    // ── INTENCIÓN: ventas hoy ──────────────────────────────
-    if (_match(lower, ['hoy', 'dia', 'día', 'vendí hoy', 'ventas hoy'])) {
-      return await _ventasHoy();
-    }
-    // ── INTENCIÓN: ventas semana ──────────────────────────
-    if (_match(lower, ['semana', '7 dias', '7 días'])) {
-      return await _ventasSemana();
-    }
-    // ── INTENCIÓN: ventas mes ─────────────────────────────
-    if (_match(lower, ['mes', '30 dias', '30 días'])) {
-      return await _ventasMes();
-    }
-    // ── INTENCIÓN: stock bajo ─────────────────────────────
-    if (_match(lower, ['stock bajo', 'bajo stock', 'poco stock', 'por agotarse'])) {
-      return await _stockBajo();
-    }
-    // ── INTENCIÓN: predicciones / críticos ─────────────────
-    if (_match(lower, ['prediccion', 'predicción', 'critico', 'crítico',
-        'urgente', 'agotar'])) {
-      return await _predicciones();
-    }
-    // ── INTENCIÓN: dashboard / resumen ─────────────────────
-    if (_match(lower, ['dashboard', 'resumen', 'como va', 'cómo va',
-        'negocio', 'general'])) {
-      return await _dashboard();
-    }
-    // ── INTENCIÓN: top productos ──────────────────────────
-    if (_match(lower, ['top', 'mas vendido', 'más vendido', 'vendidos',
-        'producto mas', 'producto más'])) {
-      return await _topProductos();
-    }
-    // ── INTENCIÓN: valor inventario ────────────────────────
-    if (_match(lower, ['valor', 'inventario total', 'capital'])) {
-      return await _valorInventario();
-    }
-    // ── INTENCIÓN: ayuda ──────────────────────────────────
-    if (_match(lower, ['ayuda', 'help', 'que puedes', 'qué puedes',
-        'opciones', 'comandos'])) {
+    if (lower.contains('ayuda') || lower.contains('help')) {
       return ChatRespuesta(
         texto: 'Puedo responder preguntas como:\n\n'
             '• "¿Cuánto vendí hoy / esta semana / este mes?"\n'
@@ -80,189 +95,156 @@ class ChatEjecutivoService {
         tipo: ChatTipo.texto,
       );
     }
+    try {
+      // Predicciones / stock
+      if (lower.contains('stock') ||
+          lower.contains('bajo') ||
+          lower.contains('agotar') ||
+          lower.contains('predic')) {
+        final r = await _dio.get('/ia/inventario/predicciones');
+        final d = r.data as Map<String, dynamic>;
+        final criticos = d['productos_criticos'] ?? 0;
+        final urgentes = d['productos_urgentes'] ?? 0;
+        final top = (d['top_criticos'] as List? ?? []).cast<Map<String, dynamic>>();
+        final buf = StringBuffer('🔮 **Predicciones de inventario**\n\n');
+        buf.writeln('• 🔴 Críticos: $criticos');
+        buf.writeln('• 🟠 Urgentes: $urgentes');
+        if (top.isNotEmpty) {
+          buf.writeln('\n**Top críticos:**');
+          for (final p in top.take(5)) {
+            buf.writeln('• ${p['nombre']} — ${p['dias_restantes']} días restantes');
+          }
+        }
+        return ChatRespuesta(texto: buf.toString(), tipo: ChatTipo.texto);
+      }
+      // Ventas
+      if (lower.contains('vendí') ||
+          lower.contains('ventas') ||
+          lower.contains('hoy') ||
+          lower.contains('semana') ||
+          lower.contains('mes')) {
+        final r = await _dio.get('/dashboard/resumen');
+        final d = r.data as Map<String, dynamic>;
+        final buf = StringBuffer('📊 **Ventas**\n\n');
+        buf.writeln('• Hoy: \$${d['ventas_hoy'] ?? 0}');
+        buf.writeln('• Transacciones: ${d['transacciones_hoy'] ?? 0}');
+        return ChatRespuesta(texto: buf.toString(), tipo: ChatTipo.texto);
+      }
+      // Resumen / dashboard
+      if (lower.contains('resumen') || lower.contains('dashboard') || lower.contains('general')) {
+        final r = await _dio.get('/dashboard/resumen');
+        final d = r.data as Map<String, dynamic>;
+        final buf = StringBuffer('📈 **Resumen**\n\n');
+        buf.writeln('• Ventas hoy: \$${d['ventas_hoy'] ?? 0}');
+        buf.writeln('• Ticket promedio: \$${d['ticket_promedio'] ?? 0}');
+        return ChatRespuesta(texto: buf.toString(), tipo: ChatTipo.texto);
+      }
+      return ChatRespuesta(
+        texto: '🤔 No entendí esa pregunta. Escribe "ayuda" para ver qué puedo hacer.',
+        tipo: ChatTipo.texto,
+      );
+    } catch (e) {
+      return ChatRespuesta(
+        texto: 'El chat IA no está disponible. Error: $causa',
+        tipo: ChatTipo.texto,
+      );
+    }
+  }
 
-    return ChatRespuesta(
-      texto: 'No entendí esa pregunta. Escribe "ayuda" para ver qué puedo hacer.',
-      tipo: ChatTipo.texto,
+  /// Atajo: usa el conversacional (preferido).
+  Future<ChatRespuesta> enviar(
+    String mensaje, {
+    List<ChatMensaje> historial = const [],
+    List<int> carritoIds = const [],
+  }) {
+    return enviarConversacional(
+      mensaje,
+      historial: historial,
+      carritoIds: carritoIds,
     );
   }
 
-  bool _match(String s, List<String> needles) =>
-      needles.any((n) => s.contains(n));
-
-  // ── IMPLEMENTACIONES ──────────────────────────────────
-
-  Future<ChatRespuesta> _ventasHoy() async {
+  /// Estado del toggle IA.
+  Future<({bool activo, String fuente, String descripcion})> getEstadoIA() async {
     try {
-      final r = await _dio.get('/dashboard/resumen');
+      final r = await _dio.get('/ia/estado');
       final d = r.data as Map<String, dynamic>;
-      final total = (d['ventas_hoy'] ?? d['ventasHoy'] ?? 0).toDouble();
-      final numVentas = d['numero_ventas_hoy'] ?? d['numeroVentasHoy'] ?? 0;
-      return ChatRespuesta(
-        texto: '📊 **Ventas de hoy**\n\n'
-            '• Total: ${_money.format(total)}\n'
-            '• Número de ventas: $numVentas\n'
-            '• Ticket promedio: ${_money.format(numVentas > 0 ? total / numVentas : 0)}',
-        tipo: ChatTipo.texto,
+      return (
+        activo: (d['activo'] as bool?) ?? false,
+        fuente: (d['fuente_actual'] as String?) ?? 'desconocido',
+        descripcion: (d['descripcion'] as String?) ?? '',
       );
-    } catch (e) {
-      return ChatRespuesta(texto: 'Error consultando ventas de hoy: $e', tipo: ChatTipo.texto);
+    } catch (_) {
+      return (activo: false, fuente: 'error', descripcion: 'No se pudo conectar al servidor');
     }
   }
 
-  Future<ChatRespuesta> _ventasSemana() async {
+  Future<bool> toggleIA(bool activo) async {
     try {
-      final r = await _dio.get('/dashboard/resumen');
-      final d = r.data as Map<String, dynamic>;
-      final total = (d['ventas_semana'] ?? d['ventasSemana'] ?? 0).toDouble();
-      final numVentas = d['numero_ventas_semana'] ?? 0;
-      return ChatRespuesta(
-        texto: '📅 **Ventas últimos 7 días**\n\n'
-            '• Total: ${_money.format(total)}\n'
-            '• Número de ventas: $numVentas\n'
-            '• Promedio diario: ${_money.format(numVentas / 7)}',
-        tipo: ChatTipo.texto,
+      await _dio.post('/ia/toggle', data: {'activo': activo});
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Sugerencias de autocompletado para registro de productos nuevos.
+  Future<SugerenciaProducto?> sugerirProducto(String nombre) async {
+    try {
+      final r = await _dio.get(
+        '/ia/sugerir-producto',
+        queryParameters: {'nombre': nombre},
       );
-    } catch (e) {
-      return ChatRespuesta(texto: 'Error: $e', tipo: ChatTipo.texto);
+      final d = r.data as Map<String, dynamic>;
+      return SugerenciaProducto.fromJson(d);
+    } catch (_) {
+      return null;
     }
   }
 
-  Future<ChatRespuesta> _ventasMes() async {
+  // ── Historial de conversaciones ──
+
+  /// Guarda una conversación en el historial persistente.
+  Future<void> guardarConversacion(ChatConversacion conv) async {
     try {
-      final r = await _dio.get('/dashboard/resumen');
-      final d = r.data as Map<String, dynamic>;
-      final total = (d['ventas_mes'] ?? d['ventasMes'] ?? 0).toDouble();
-      final numVentas = d['numero_ventas_mes'] ?? 0;
-      return ChatRespuesta(
-        texto: '📆 **Ventas últimos 30 días**\n\n'
-            '• Total: ${_money.format(total)}\n'
-            '• Número de ventas: $numVentas\n'
-            '• Promedio diario: ${_money.format(numVentas / 30)}',
-        tipo: ChatTipo.texto,
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_historialKey);
+      final list = raw == null
+          ? <ChatConversacion>[]
+          : (jsonDecode(raw) as List<dynamic>)
+              .map((j) => ChatConversacion.fromJson(j as Map<String, dynamic>))
+              .toList();
+      list.insert(0, conv);
+      while (list.length > _maxConversaciones) {
+        list.removeLast();
+      }
+      await prefs.setString(
+        _historialKey,
+        jsonEncode(list.map((c) => c.toJson()).toList()),
       );
-    } catch (e) {
-      return ChatRespuesta(texto: 'Error: $e', tipo: ChatTipo.texto);
+    } catch (_) {
+      // Silenciar errores de persistencia
     }
   }
 
-  Future<ChatRespuesta> _stockBajo() async {
+  Future<List<ChatConversacion>> cargarConversaciones() async {
     try {
-      final r = await _dio.get('/productos', queryParameters: {
-        'page': 1,
-        'page_size': 200,
-      });
-      final productos = (r.data['data'] as List).cast<Map<String, dynamic>>();
-      final bajo = productos.where((p) {
-        final stock = (p['stock_actual'] ?? 0) as int;
-        final minimo = (p['stock_minimo'] ?? 0) as int;
-        return stock <= minimo;
-      }).toList();
-
-      if (bajo.isEmpty) {
-        return ChatRespuesta(
-          texto: '✅ Todos los productos tienen stock suficiente.',
-          tipo: ChatTipo.texto,
-        );
-      }
-
-      final buf = StringBuffer('⚠️ **Productos con stock bajo** (${bajo.length})\n\n');
-      for (final p in bajo.take(10)) {
-        final nombre = p['nombre'] ?? 'Sin nombre';
-        final stock = p['stock_actual'] ?? 0;
-        final min = p['stock_minimo'] ?? 0;
-        buf.writeln('• $nombre — stock: $stock / mín: $min');
-      }
-      if (bajo.length > 10) {
-        buf.writeln('\n… y ${bajo.length - 10} más.');
-      }
-      return ChatRespuesta(texto: buf.toString(), tipo: ChatTipo.texto);
-    } catch (e) {
-      return ChatRespuesta(texto: 'Error: $e', tipo: ChatTipo.texto);
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_historialKey);
+      if (raw == null) return [];
+      return (jsonDecode(raw) as List<dynamic>)
+          .map((j) => ChatConversacion.fromJson(j as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return [];
     }
   }
 
-  Future<ChatRespuesta> _predicciones() async {
+  Future<void> borrarHistorial() async {
     try {
-      final r = await _dio.get('/ia/inventario/predicciones');
-      final d = r.data as Map<String, dynamic>;
-      final criticos = d['productos_criticos'] ?? 0;
-      final urgentes = d['productos_urgentes'] ?? 0;
-      final sinVentas = d['productos_sin_ventas'] ?? 0;
-      final top = (d['top_criticos'] as List? ?? []).cast<Map<String, dynamic>>();
-
-      final buf = StringBuffer('🔮 **Predicciones de inventario**\n\n');
-      buf.writeln('• 🔴 Críticos (≤3 días): $criticos');
-      buf.writeln('• 🟠 Urgentes (≤7 días): $urgentes');
-      buf.writeln('• ⚫ Sin ventas (30d): $sinVentas');
-      buf.writeln('');
-      if (top.isEmpty) {
-        buf.writeln('✅ No hay productos en estado crítico.');
-      } else {
-        buf.writeln('**Top críticos:**');
-        for (final p in top.take(5)) {
-          final nombre = p['nombre'] ?? '?';
-          final dias = p['dias_restantes'] ?? '?';
-          buf.writeln('• $nombre — $dias días restantes');
-        }
-      }
-      return ChatRespuesta(texto: buf.toString(), tipo: ChatTipo.texto);
-    } catch (e) {
-      return ChatRespuesta(texto: 'Error: $e', tipo: ChatTipo.texto);
-    }
-  }
-
-  Future<ChatRespuesta> _dashboard() async {
-    try {
-      final r = await _dio.get('/dashboard/resumen');
-      final d = r.data as Map<String, dynamic>;
-      final buf = StringBuffer('📈 **Resumen del negocio**\n\n');
-      buf.writeln('• Ventas hoy: ${_money.format(d['ventas_hoy'] ?? 0)}');
-      buf.writeln('• Ventas semana: ${_money.format(d['ventas_semana'] ?? 0)}');
-      buf.writeln('• Ventas mes: ${_money.format(d['ventas_mes'] ?? 0)}');
-      buf.writeln('• Productos totales: ${d['total_productos'] ?? 0}');
-      buf.writeln('• Stock bajo: ${d['productos_stock_bajo'] ?? 0}');
-      return ChatRespuesta(texto: buf.toString(), tipo: ChatTipo.texto);
-    } catch (e) {
-      return ChatRespuesta(texto: 'Error: $e', tipo: ChatTipo.texto);
-    }
-  }
-
-  Future<ChatRespuesta> _topProductos() async {
-    try {
-      final r = await _dio.get('/dashboard/resumen');
-      final d = r.data as Map<String, dynamic>;
-      final top = (d['top_productos'] as List? ?? []).cast<Map<String, dynamic>>();
-      if (top.isEmpty) {
-        return ChatRespuesta(
-          texto: 'Aún no hay datos de ventas suficientes para generar un top.',
-          tipo: ChatTipo.texto,
-        );
-      }
-      final buf = StringBuffer('🏆 **Top productos vendidos (30 días)**\n\n');
-      for (var i = 0; i < top.take(5).length; i++) {
-        final p = top[i];
-        buf.writeln('${i + 1}. ${p['nombre']} — ${p['cantidad_vendida']} uds');
-      }
-      return ChatRespuesta(texto: buf.toString(), tipo: ChatTipo.texto);
-    } catch (e) {
-      return ChatRespuesta(texto: 'Error: $e', tipo: ChatTipo.texto);
-    }
-  }
-
-  Future<ChatRespuesta> _valorInventario() async {
-    try {
-      final r = await _dio.get('/ia/inventario/predicciones');
-      final d = r.data as Map<String, dynamic>;
-      final valor = (d['valor_inventario'] ?? 0).toDouble();
-      final critico = (d['valor_critico'] ?? 0).toDouble();
-      final buf = StringBuffer('💰 **Valor de inventario**\n\n');
-      buf.writeln('• Total: ${_money.format(valor)}');
-      buf.writeln('• En productos críticos: ${_money.format(critico)}');
-      return ChatRespuesta(texto: buf.toString(), tipo: ChatTipo.texto);
-    } catch (e) {
-      return ChatRespuesta(texto: 'Error: $e', tipo: ChatTipo.texto);
-    }
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_historialKey);
+    } catch (_) {}
   }
 }
 
@@ -271,13 +253,118 @@ enum ChatTipo { texto }
 class ChatRespuesta {
   final String texto;
   final ChatTipo tipo;
-  ChatRespuesta({required this.texto, required this.tipo});
+  final List<Sugerencia> sugerencias;
+  final String fuente;
+  final String intencion;
+
+  ChatRespuesta({
+    required this.texto,
+    required this.tipo,
+    this.sugerencias = const [],
+    this.fuente = 'desconocido',
+    this.intencion = '',
+  });
 }
 
 class ChatMensaje {
   final String texto;
   final bool esUsuario;
   final DateTime timestamp;
-  ChatMensaje({required this.texto, required this.esUsuario, DateTime? timestamp})
-      : timestamp = timestamp ?? DateTime.now();
+  ChatMensaje({
+    required this.texto,
+    required this.esUsuario,
+    DateTime? timestamp,
+  }) : timestamp = timestamp ?? DateTime.now();
+
+  Map<String, dynamic> toJson() => {
+        'texto': texto,
+        'esUsuario': esUsuario,
+        'timestamp': timestamp.toIso8601String(),
+      };
+
+  factory ChatMensaje.fromJson(Map<String, dynamic> json) => ChatMensaje(
+        texto: json['texto'] as String,
+        esUsuario: json['esUsuario'] as bool,
+        timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ?? DateTime.now(),
+      );
+}
+
+class ChatConversacion {
+  final String id;
+  final String titulo;
+  final List<ChatMensaje> mensajes;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  ChatConversacion({
+    required this.id,
+    required this.titulo,
+    required this.mensajes,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'titulo': titulo,
+        'mensajes': mensajes.map((m) => m.toJson()).toList(),
+        'createdAt': createdAt.toIso8601String(),
+        'updatedAt': updatedAt.toIso8601String(),
+      };
+
+  factory ChatConversacion.fromJson(Map<String, dynamic> json) => ChatConversacion(
+        id: json['id'] as String,
+        titulo: json['titulo'] as String,
+        mensajes: (json['mensajes'] as List<dynamic>)
+            .map((m) => ChatMensaje.fromJson(m as Map<String, dynamic>))
+            .toList(),
+        createdAt:
+            DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+        updatedAt:
+            DateTime.tryParse(json['updatedAt'] as String? ?? '') ?? DateTime.now(),
+      );
+}
+
+/// Sugerencia de autocompletado para producto nuevo.
+class SugerenciaProducto {
+  final String nombre;
+  final String categoriaSugerida;
+  final int? categoriaId;
+  final double precioMin;
+  final double precioMax;
+  final double precioPromedio;
+  final String descripcion;
+  final List<int> necesita;
+  final int coincidencias;
+  final String fuente;
+
+  SugerenciaProducto({
+    required this.nombre,
+    required this.categoriaSugerida,
+    this.categoriaId,
+    required this.precioMin,
+    required this.precioMax,
+    required this.precioPromedio,
+    required this.descripcion,
+    this.necesita = const [],
+    required this.coincidencias,
+    required this.fuente,
+  });
+
+  factory SugerenciaProducto.fromJson(Map<String, dynamic> json) {
+    return SugerenciaProducto(
+      nombre: (json['nombre'] as String?) ?? '',
+      categoriaSugerida: (json['categoria_sugerida'] as String?) ?? '',
+      categoriaId: (json['categoria_id'] as num?)?.toInt(),
+      precioMin: (json['precio_min'] as num?)?.toDouble() ?? 0,
+      precioMax: (json['precio_max'] as num?)?.toDouble() ?? 0,
+      precioPromedio: (json['precio_promedio'] as num?)?.toDouble() ?? 0,
+      descripcion: (json['descripcion'] as String?) ?? '',
+      necesita: ((json['necesita'] as List<dynamic>?) ?? const [])
+          .map((e) => (e as num).toInt())
+          .toList(),
+      coincidencias: (json['coincidencias'] as num?)?.toInt() ?? 0,
+      fuente: (json['fuente'] as String?) ?? 'desconocido',
+    );
+  }
 }

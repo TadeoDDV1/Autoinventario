@@ -14,7 +14,7 @@ import (
 
 const RequestIDHeader = "X-Request-ID"
 
-func SetupRouter(productoHandler *handler.ProductoHandler, ventaHandler *handler.VentaHandler, entradaHandler *handler.EntradaHandler, iaHandler *ia.Handler, syncHandler *ia.SyncHandler) *gin.Engine {
+func SetupRouter(productoHandler *handler.ProductoHandler, ventaHandler *handler.VentaHandler, entradaHandler *handler.EntradaHandler, iaHandler *ia.Handler, syncHandler *ia.SyncHandler, chatHandler *ia.ChatHandler) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -37,6 +37,7 @@ func SetupRouter(productoHandler *handler.ProductoHandler, ventaHandler *handler
 		{
 			productos.GET("", productoHandler.GetAll)
 			productos.GET("/buscar", productoHandler.BuscarPorCodigo)
+			productos.GET("/escanear", productoHandler.Escanear)
 			productos.GET("/:id", productoHandler.GetByID)
 			productos.POST("", productoHandler.Create)
 			productos.PUT("/:id", productoHandler.Update)
@@ -70,6 +71,14 @@ func SetupRouter(productoHandler *handler.ProductoHandler, ventaHandler *handler
 		{
 			ia.GET("/sugerencias", iaHandler.GetSugerencias)
 			ia.GET("/inventario/predicciones", iaHandler.GetPredicciones)
+
+			// Chat IA conversacional
+			ia.POST("/chat", chatHandler.Chat)
+			ia.POST("/toggle", chatHandler.ToggleIA)
+			ia.GET("/estado", chatHandler.GetEstado)
+
+			// Sugeridor de productos nuevos (autocompletado)
+			ia.GET("/sugerir-producto", iaHandler.SugerirProducto)
 		}
 
 		// Dashboard ejecutivo

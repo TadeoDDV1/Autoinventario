@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/ferreteria/backend/internal/apperrors"
 	"github.com/ferreteria/backend/internal/models"
@@ -179,6 +180,35 @@ func (h *ProductoHandler) BuscarPorCodigo(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, producto)
+}
+
+// Escanear busca un producto por código de barras. Si existe, devuelve el
+// producto. Si NO existe, devuelve {existe: false, codigo: XXX} (no 404)
+// para que el frontend pueda redirigir al formulario de registro.
+//
+// GET /api/v1/productos/escanear?codigo=XXX
+func (h *ProductoHandler) Escanear(c *gin.Context) {
+	codigo := strings.TrimSpace(c.Query("codigo"))
+	if codigo == "" {
+		c.JSON(http.StatusBadRequest, models.APIError{Error: "BAD_REQUEST", Message: "Código requerido"})
+		return
+	}
+
+	producto, err := h.service.BuscarPorCodigo(codigo)
+	if err == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"existe":   true,
+			"producto": producto,
+		})
+		return
+	}
+
+	// No existe — devolver señal explícita (no 404)
+	c.JSON(http.StatusOK, gin.H{
+		"existe": false,
+		"codigo": codigo,
+		"mensaje": "Producto no registrado. Puedes agregarlo ahora.",
+	})
 }
 
 func (h *ProductoHandler) AjustarStock(c *gin.Context) {

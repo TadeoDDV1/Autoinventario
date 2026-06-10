@@ -89,10 +89,16 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              FilledButton.icon(
+              IconButton.filledTonal(
+                onPressed: () => context.go('/inventario/escanear'),
+                icon: const Icon(Icons.qr_code_scanner),
+                tooltip: 'Escanear producto nuevo',
+              ),
+              const SizedBox(width: 4),
+              IconButton.filled(
                 onPressed: () => context.go('/inventario/nuevo'),
-                icon: const Icon(Icons.add),
-                label: const Text('Nuevo Producto'),
+                icon: const Icon(Icons.edit_note),
+                tooltip: 'Registro manual',
               ),
               const SizedBox(width: 16),
             ],
@@ -230,10 +236,44 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
           if (Breakpoints.isTablet(width) || Breakpoints.isDesktop(width)) {
             return const SizedBox.shrink();
           }
-          return FloatingActionButton.extended(
-            onPressed: () => context.go('/inventario/nuevo'),
-            icon: const Icon(Icons.add),
-            label: const Text('Nuevo'),
+          // FAB dual: tap abre menu con 2 opciones
+          return PopupMenuButton<String>(
+            tooltip: 'Agregar producto',
+            onSelected: (value) {
+              if (value == 'escanear') {
+                context.go('/inventario/escanear');
+              } else if (value == 'manual') {
+                context.go('/inventario/nuevo');
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'escanear',
+                child: Row(
+                  children: [
+                    Icon(Icons.qr_code_scanner),
+                    SizedBox(width: 12),
+                    Text('Escanear nuevo'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'manual',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit_note),
+                    SizedBox(width: 12),
+                    Text('Registro manual'),
+                  ],
+                ),
+              ),
+            ],
+            child: FloatingActionButton(
+              onPressed: null, // delegado al PopupMenuButton
+              backgroundColor: theme.colorScheme.primary,
+              foregroundColor: theme.colorScheme.onPrimary,
+              child: const Icon(Icons.add),
+            ),
           );
         },
       ),

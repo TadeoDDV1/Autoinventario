@@ -14,11 +14,18 @@ import (
 
 // Sugerencia representa una recomendación para el cajero.
 type Sugerencia struct {
-	Tipo       string  `json:"tipo"`       // "complemento" | "sustituto" | "alerta_stock"
+	Tipo       string  `json:"tipo"`       // "complemento" | "sustituto" | "alerta_stock" | "upgrade"
 	ProductoID int     `json:"producto_id"`
 	Nombre     string  `json:"nombre"`
 	Precio     float64 `json:"precio"`
 	Razon      string  `json:"razon"`
+
+	// Campos enriquecidos (cross-sell dinámico)
+	Descripcion   string `json:"descripcion,omitempty"`
+	Compatibles   []int  `json:"compatibles,omitempty"`
+	EsSustitutoDe *int   `json:"es_sustituto_de,omitempty"`
+	NivelUrgencia string `json:"nivel_urgencia,omitempty"` // bajo | medio | alto
+	StockActual   int    `json:"stock_actual,omitempty"`
 }
 
 // SugerenciasInput es lo que llega al endpoint.

@@ -47,8 +47,18 @@ func main() {
 
 	iaHandler := ia.NewHandler(db)
 	syncHandler := ia.NewSyncHandler(ventaService)
+	chatHandler := ia.NewChatHandler(db)
 
-	r := router.SetupRouter(productoHandler, ventaHandler, entradaHandler, iaHandler, syncHandler)
+	// Conectar el ChatHandler con el CopilotService global (para reusar LLMClient)
+	ia.SetCopilotGlobal(iaHandler.Copilot())
+
+	// Refrescar el catálogo del chat al iniciar (en background-safe)
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		chatHandler.RefrescarProductos()
+	}()
+
+	r := router.SetupRouter(productoHandler, ventaHandler, entradaHandler, iaHandler, syncHandler, chatHandler)
 
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {

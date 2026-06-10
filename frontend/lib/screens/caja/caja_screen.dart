@@ -27,6 +27,14 @@ class _FocusInputIntent extends Intent {
   const _FocusInputIntent();
 }
 
+class _OpenChatIntent extends Intent {
+  const _OpenChatIntent();
+}
+
+class _NuevoProductoIntent extends Intent {
+  const _NuevoProductoIntent();
+}
+
 class CajaScreen extends ConsumerStatefulWidget {
   const CajaScreen({super.key});
 
@@ -74,6 +82,17 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
     );
   }
 
+  void _abrirChat() {
+    final carrito = ref.read(carritoProvider);
+    final ids = carrito.map((i) => i.producto.id).toList();
+    final query = ids.isEmpty ? '' : '?carrito=${ids.join(',')}';
+    context.push('/chat$query');
+  }
+
+  void _nuevoProducto() {
+    context.go('/inventario/nuevo');
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -81,13 +100,17 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
     final carritoCantidad = ref.watch(carritoCantidadProvider);
 
     return Shortcuts(
-      shortcuts: const <ShortcutActivator, Intent>{
-        SingleActivator(LogicalKeyboardKey.escape): _ClearCartIntent(),
-        SingleActivator(LogicalKeyboardKey.keyI, control: true):
+      shortcuts: <ShortcutActivator, Intent>{
+        const SingleActivator(LogicalKeyboardKey.escape): _ClearCartIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyI, control: true):
             _GoInventarioIntent(),
-        SingleActivator(LogicalKeyboardKey.keyC, control: true):
+        const SingleActivator(LogicalKeyboardKey.keyC, control: true):
             _GoCajaIntent(),
-        SingleActivator(LogicalKeyboardKey.f1): _FocusInputIntent(),
+        const SingleActivator(LogicalKeyboardKey.f1): _FocusInputIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true):
+            _OpenChatIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyN, control: true):
+            _NuevoProductoIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
@@ -119,6 +142,18 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
               return null;
             },
           ),
+          _OpenChatIntent: CallbackAction<_OpenChatIntent>(
+            onInvoke: (_) {
+              _abrirChat();
+              return null;
+            },
+          ),
+          _NuevoProductoIntent: CallbackAction<_NuevoProductoIntent>(
+            onInvoke: (_) {
+              _nuevoProducto();
+              return null;
+            },
+          ),
         },
         child: Focus(
           focusNode: _shortcutFocus,
@@ -135,6 +170,14 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
     int carritoCantidad,
   ) {
     return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _abrirChat,
+        icon: const Icon(Icons.auto_awesome),
+        label: const Text('IA'),
+        tooltip: 'Abrir asistente IA (Ctrl+K)',
+        backgroundColor: theme.colorScheme.tertiaryContainer,
+        foregroundColor: theme.colorScheme.onTertiaryContainer,
+      ),
       body: Column(
         children: [
           // Header con modo
@@ -296,6 +339,22 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
                             color: theme.colorScheme.outline,
                           ),
                           textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: () => context.go('/inventario/escanear'),
+                              icon: const Icon(Icons.add_a_photo_outlined, size: 18),
+                              label: const Text('Escanear nuevo'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () => context.go('/inventario/nuevo'),
+                              icon: const Icon(Icons.edit_note, size: 18),
+                              label: const Text('Manual'),
+                            ),
+                          ],
                         ),
                       ],
                     ),

@@ -6,6 +6,8 @@ import '../domain/enums.dart';
 import '../models/venta.dart';
 import '../providers/theme_provider.dart';
 import '../screens/chat/chat_screen.dart';
+import '../screens/chat/historial_chat_screen.dart';
+import '../widgets/ia/fuente_ia_badge.dart';
 import '../screens/caja/caja_screen.dart';
 import '../screens/dashboard/dashboard_screen.dart';
 import '../screens/ventas/ticket_screen.dart';
@@ -13,6 +15,7 @@ import '../screens/ventas/historial_ventas_screen.dart';
 import '../screens/inventario/inventario_screen.dart';
 import '../screens/inventario/predicciones_screen.dart';
 import '../screens/inventario/producto_form_screen.dart';
+import '../screens/inventario/escanear_producto_screen.dart';
 import '../widgets/conectividad_badge.dart';
 import '../widgets/stock_alert_banner.dart';
 import '../providers/modo_provider.dart';
@@ -79,6 +82,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                 builder: (context, state) => const ProductoFormScreen(),
               ),
               GoRoute(
+                path: 'escanear',
+                parentNavigatorKey: _rootNavigatorKey,
+                builder: (context, state) => const EscanearProductoScreen(),
+              ),
+              GoRoute(
                 path: 'editar/:id',
                 parentNavigatorKey: _rootNavigatorKey,
                 builder: (context, state) {
@@ -95,6 +103,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/chat',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const ChatScreen(),
+        routes: [
+          GoRoute(
+            path: 'historial',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) => const HistorialChatScreen(),
+          ),
+        ],
       ),
     ],
   );
@@ -141,7 +156,6 @@ class _AppShellState extends ConsumerState<AppShell> {
     final isWide = Breakpoints.isDesktop(width);
     final selectedIndex = _getSelectedIndex(context);
     final stockAlertCount = ref.watch(stockAlertCountProvider);
-
     final destinations = [
       NavigationDestination(
         icon: const Icon(Icons.dashboard_outlined),
@@ -224,7 +238,9 @@ class _AppShellState extends ConsumerState<AppShell> {
                     padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     child: ConectividadBadge(),
                   ),
-                Expanded(child: widget.child),
+                Expanded(
+                  child: widget.child,
+                ),
               ],
             ),
           ),

@@ -1,0 +1,197 @@
+{
+  "categorias": {
+    "Herramientas Manuales": {
+      "icono": "handyman",
+      "productos_tipicos": ["martillo", "destornillador", "llave", "pinzas", "alicate", "cinta métrica", "flexómetro"],
+      "necesita": ["cinta métrica", "lápiz", "guantes"],
+      "descripcion": "Herramientas que funcionan con fuerza humana. Ideales para trabajos de precisión y ensamblaje.",
+      "keywords": ["martillo", "destornillador", "llave", "pinzas", "alicate", "cinta", "flexómetro"]
+    },
+    "Herramientas Eléctricas": {
+      "icono": "power",
+      "productos_tipicos": ["taladro", "rotomartillo", "sierra circular", "lijadora", "esmeril", "caladora", "router"],
+      "necesita": ["broca", "disco de corte", "disco de lija", "cinta métrica", "gafas de protección", "guantes", "extensión eléctrica"],
+      "descripcion": "Herramientas que funcionan con electricidad o batería. Para perforar, cortar, lijar y más.",
+      "keywords": ["taladro", "rotomartillo", "sierra", "lijadora", "esmeril", "caladora", "router", "eléctrica"]
+    },
+    "Electricidad": {
+      "icono": "electrical_services",
+      "productos_tipicos": ["cable", "interruptor", "contacto", "apagador", "foco", "bombilla", "cinta aislante", "cinta de aislar", "breaker"],
+      "necesita": ["cinta aislante", "destornillador", "pelacables", "multímetro", "cinta de aislar"],
+      "descripcion": "Materiales y herramientas para instalaciones eléctricas residenciales y comerciales.",
+      "keywords": ["cable", "interruptor", "contacto", "apagador", "foco", "bombilla", "eléctrico", "breaker"]
+    },
+    "Plomería": {
+      "icono": "plumbing",
+      "productos_tipicos": ["tubo pvc", "codo", "tee", "válvula", "llave stillson", "teflón", "pegamento pvc", "cinta selladora", "empaque"],
+      "necesita": ["teflón", "pegamento pvc", "cinta selladora", "codo", "llave stillson"],
+      "descripcion": "Materiales y herramientas para instalación y reparación de tuberías de agua y drenaje.",
+      "keywords": ["pvc", "codo", "tee", "válvula", "tubo", "plomería", "teflón", "sellar"]
+    },
+    "Tornillería y Fijaciones": {
+      "icono": "screwdriver",
+      "productos_tipicos": ["tornillo", "taquete", "ancla", "clavo", "birlos", "tuerca", "rondana", "arandela", "broca"],
+      "necesita": ["destornillador", "taladro", "broca", "llave"],
+      "descripcion": "Sujetadores y elementos de fijación. Tornillos, taquetes, anclas y más.",
+      "keywords": ["tornillo", "taquete", "ancla", "clavo", "birlos", "tuerca", "rondana", "arandela"]
+    },
+    "Pintura y Acabados": {
+      "icono": "format_paint",
+      "productos_tipicos": ["pintura", "brocha", "rodillo", "cinta de enmascarar", "lija", "thinner", "barniz", "sellador"],
+      "necesita": ["brocha", "rodillo", "cinta de enmascarar", "lija", "cubrepintura", "charola"],
+      "descripcion": "Pinturas, herramientas y accesorios para acabados de superficies.",
+      "keywords": ["pintura", "brocha", "rodillo", "cinta", "lija", "thinner", "barniz", "sellador"]
+    },
+    "Construcción": {
+      "icono": "foundation",
+      "productos_tipicos": ["cemento", "arena", "grava", "block", "tabique", "yeso", "mortero", "varilla", "alambrón"],
+      "necesita": ["cuchara de albañil", "nivel", "cinta métrica", "carretilla", "bieldo"],
+      "descripcion": "Materiales de construcción para obra negra y acabados.",
+      "keywords": ["cemento", "arena", "grava", "block", "tabique", "yeso", "mortero", "varilla", "construcción"]
+    },
+    "Seguridad Industrial": {
+      "icono": "health_and_safety",
+      "productos_tipicos": ["casco", "guantes", "gafas", "lentes de seguridad", "mascarilla", "tapones auditivos", "chaleco", "botas industriales"],
+      "necesita": ["casco", "guantes", "gafas", "chaleco"],
+      "descripcion": "Equipo de protección personal para trabajo en obra, taller o industria.",
+      "keywords": ["casco", "guantes", "gafas", "lentes", "mascarilla", "tapones", "chaleco", "botas", "seguridad", "epp"]
+    }
+  },
+  "productos": {
+    "taladro": {
+      "categoria": "Herramientas Eléctricas",
+      "compatibles": ["broca", "cinta métrica", "gafas", "guantes"],
+      "descripcion": "Herramienta eléctrica para perforar superficies o atornillar/desatornillar.",
+      "usos": ["perforar concreto", "perforar madera", "perforar metal", "atornillar", "mezclar pintura"],
+      "sustitutos": ["rotomartillo", "taladro inalámbrico", "atornillador eléctrico"]
+    },
+    "rotomartillo": {
+      "categoria": "Herramientas Eléctricas",
+      "compatibles": ["broca para concreto", "cincel", "gafas", "guantes", "cinta métrica"],
+      "descripcion": "Taladro de alta potencia con percusión. Ideal para concreto y mampostería.",
+      "usos": ["perforar concreto", "demoler", "cincelar"],
+      "sustitutos": ["taladro con percusión"]
+    },
+    "martillo": {
+      "categoria": "Herramientas Manuales",
+      "compatibles": ["clavos", "gafas", "guantes", "cinta métrica"],
+      "descripcion": "Herramienta manual para clavar, desclavar y golpear.",
+      "usos": ["clavar clavos", "desclavar", "golpear", "demoler ligero"],
+      "sustitutos": ["maza", "marro"]
+    },
+    "destornillador": {
+      "categoria": "Herramientas Manuales",
+      "compatibles": ["tornillo", "gafas"],
+      "descripcion": "Herramienta manual para atornillar y desatornillar.",
+      "usos": ["atornillar", "desatornillar", "apretar", "aflojar"],
+      "sustitutos": ["atornillador eléctrico", "llave Allen"]
+    },
+    "cinta métrica": {
+      "categoria": "Herramientas Manuales",
+      "compatibles": ["lápiz", "nivel"],
+      "descripcion": "Instrumento de medición flexible. Indispensable en cualquier trabajo.",
+      "usos": ["medir distancias", "marcar", "nivelar"]
+    },
+    "broca": {
+      "categoria": "Tornillería y Fijaciones",
+      "compatibles": ["taladro", "rotomartillo", "gafas"],
+      "descripcion": "Accesorio de corte que se monta en un taladro para perforar.",
+      "usos": ["perforar concreto", "perforar madera", "perforar metal"],
+      "sustitutos": ["broca con percusión", "sierra copa"]
+    },
+    "disco de corte": {
+      "categoria": "Herramientas Eléctricas",
+      "compatibles": ["esmeril", "sierra circular", "gafas", "guantes", "mascarilla"],
+      "descripcion": "Disco abrasivo para cortar metal, concreto o madera con esmeril o sierra.",
+      "usos": ["cortar metal", "cortar concreto", "cortar azulejo"],
+      "sustitutos": ["sierra de mano"]
+    },
+    "cinta aislante": {
+      "categoria": "Electricidad",
+      "compatibles": ["cable", "destornillador"],
+      "descripcion": "Cinta adhesiva para aislar conexiones eléctricas.",
+      "usos": ["aislar cables", "sujetar", "marcar"]
+    },
+    "pvc": {
+      "categoria": "Plomería",
+      "compatibles": ["codo", "tee", "pegamento pvc", "teflón", "cinta selladora"],
+      "descripcion": "Tubo de policloruro de vinilo para conducción de agua fría o drenaje.",
+      "usos": ["agua potable", "drenaje", "riego", "instalaciones sanitarias"],
+      "sustitutos": ["tubo CPVC", "tubo PPR", "tubo galvanizado"]
+    },
+    "codo": {
+      "categoria": "Plomería",
+      "compatibles": ["tubo pvc", "pegamento pvc", "teflón"],
+      "descripcion": "Conexión en ángulo (90° o 45°) para cambiar dirección en tuberías."
+    },
+    "teflón": {
+      "categoria": "Plomería",
+      "compatibles": ["llave stillson", "codo", "válvula", "tubo pvc"],
+      "descripcion": "Cinta selladora para roscas en conexiones de plomería.",
+      "usos": ["sellar roscas", "evitar fugas"],
+      "sustitutos": ["cinta selladora", "pegamento para roscas"]
+    },
+    "tornillo": {
+      "categoria": "Tornillería y Fijaciones",
+      "compatibles": ["taquete", "destornillador", "taladro", "broca"],
+      "descripcion": "Sujetador roscado para unir piezas. Se usa con taquete en muros.",
+      "usos": ["fijar", "ensamblar", "colgar"],
+      "sustitutos": ["clavo", "birlos", "ancla"]
+    },
+    "taquete": {
+      "categoria": "Tornillería y Fijaciones",
+      "compatibles": ["tornillo", "taladro", "broca"],
+      "descripcion": "Ancla plástica que se inserta en muro para recibir un tornillo.",
+      "usos": ["colgar en muro", "fijar en concreto", "fijar en tabique"],
+      "sustitutos": ["ancla metálica", "taquete de expansión"]
+    },
+    "pintura": {
+      "categoria": "Pintura y Acabados",
+      "compatibles": ["brocha", "rodillo", "cinta de enmascarar", "lija", "thinner", "cubrepintura"],
+      "descripcion": "Recubrimiento líquido para proteger y decorar superficies.",
+      "usos": ["pintar muros", "pintar madera", "pintar metal", "pintar exteriores"]
+    },
+    "brocha": {
+      "categoria": "Pintura y Acabados",
+      "compatibles": ["pintura", "thinner", "cinta de enmascarar"],
+      "descripcion": "Herramienta con cerdas para aplicar pintura en superficies.",
+      "usos": ["aplicar pintura", "retocar", "barnizar"]
+    },
+    "rodillo": {
+      "categoria": "Pintura y Acabados",
+      "compatibles": ["pintura", "charola", "cinta de enmascarar"],
+      "descripcion": "Herramienta cilíndrica con felpa para pintar grandes superficies rápido."
+    },
+    "cinta de enmascarar": {
+      "categoria": "Pintura y Acabados",
+      "compatibles": ["pintura", "brocha", "rodillo"],
+      "descripcion": "Cinta adhesiva para proteger superficies al pintar o delimitar áreas."
+    },
+    "casco": {
+      "categoria": "Seguridad Industrial",
+      "compatibles": ["gafas", "guantes", "chaleco", "botas"],
+      "descripcion": "Equipo de protección para la cabeza en obras y construcción."
+    },
+    "guantes": {
+      "categoria": "Seguridad Industrial",
+      "compatibles": ["casco", "gafas", "mascarilla"],
+      "descripcion": "Protección para las manos. Hay de varios tipos: carnaza, nitrilo, látex, anticorte."
+    },
+    "gafas": {
+      "categoria": "Seguridad Industrial",
+      "compatibles": ["casco", "guantes", "mascarilla"],
+      "descripcion": "Protección ocular contra partículas, polvo o salpicaduras."
+    },
+    "cemento": {
+      "categoria": "Construcción",
+      "compatibles": ["arena", "grava", "agua", "cuchara de albañil", "carretilla"],
+      "descripcion": "Material aglomerante para hacer concreto o mortero.",
+      "usos": ["hacer concreto", "pegar block", "resanes", "acabados"]
+    },
+    "block": {
+      "categoria": "Construcción",
+      "compatibles": ["cemento", "arena", "mortero"],
+      "descripcion": "Pieza de concreto o arcilla para construcción de muros."
+    }
+  }
+}

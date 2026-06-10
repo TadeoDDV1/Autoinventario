@@ -18,6 +18,7 @@ type Handler struct {
 	copilot       *CopilotService
 	dashboard     *DashboardService
 	predicciones  *PrediccionesService
+	db            *sqlx.DB // referencia opcional para queries directas
 }
 
 func NewHandler(db *sqlx.DB) *Handler {
@@ -30,7 +31,13 @@ func NewHandler(db *sqlx.DB) *Handler {
 		copilot:      copilot,
 		dashboard:    NewDashboardService(db),
 		predicciones: NewPrediccionesService(db),
+		db:           db,
 	}
+}
+
+// Copilot retorna el CopilotService para que el ChatHandler reuse su LLMClient.
+func (h *Handler) Copilot() *CopilotService {
+	return h.copilot
 }
 
 // RefrescarCatalogo recarga el catálogo (llamar cada N horas o por endpoint admin).
