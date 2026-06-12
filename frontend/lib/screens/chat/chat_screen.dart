@@ -6,7 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/format/money.dart';
 import '../../providers/venta_provider.dart';
 import '../../services/chat_ejecutivo_service.dart';
-import '../../widgets/chat/sugerencia_chip.dart';
+import '../../widgets/chat/tarjeta_sugerencia.dart';
 
 /// Chat IA conversacional de la ferretería.
 ///
@@ -393,12 +393,11 @@ class _Burbuja extends StatelessWidget {
                 ],
               ),
               if (respuesta!.sugerencias.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
+                const SizedBox(height: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: respuesta!.sugerencias
-                      .map((s) => SugerenciaChip(sugerencia: s))
+                      .map((s) => TarjetaSugerencia(sugerencia: s))
                       .toList(),
                 ),
               ],

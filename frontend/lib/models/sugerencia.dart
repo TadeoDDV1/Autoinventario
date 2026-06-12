@@ -1,10 +1,16 @@
 // Modelos para el módulo de IA.
 class Sugerencia {
-  final String tipo; // "complemento" | "sustituto" | "alerta_stock"
+  final String tipo; // "complemento" | "sustituto" | "alerta_stock" | "upgrade"
   final int productoId;
   final String nombre;
   final double precio;
   final String razon;
+
+  // Campos enriquecidos (opcionales, vienen del backend si están disponibles)
+  final String? descripcion;
+  final List<int> compatibles;
+  final int? stockActual;
+  final String nivelUrgencia; // "bajo" | "medio" | "alto" | ""
 
   const Sugerencia({
     required this.tipo,
@@ -12,16 +18,40 @@ class Sugerencia {
     required this.nombre,
     required this.precio,
     required this.razon,
+    this.descripcion,
+    this.compatibles = const <int>[],
+    this.stockActual,
+    this.nivelUrgencia = '',
   });
 
   factory Sugerencia.fromJson(Map<String, dynamic> json) {
     return Sugerencia(
       tipo: json['tipo'] as String? ?? 'complemento',
-      productoId: json['producto_id'] as int,
-      nombre: json['nombre'] as String,
-      precio: (json['precio'] as num).toDouble(),
+      productoId: (json['producto_id'] as num).toInt(),
+      nombre: json['nombre'] as String? ?? 'Producto',
+      precio: (json['precio'] as num?)?.toDouble() ?? 0.0,
       razon: json['razon'] as String? ?? '',
+      descripcion: json['descripcion'] as String?,
+      compatibles: ((json['compatibles'] as List<dynamic>?) ?? const [])
+          .map((e) => (e as num).toInt())
+          .toList(),
+      stockActual: (json['stock_actual'] as num?)?.toInt(),
+      nivelUrgencia: json['nivel_urgencia'] as String? ?? '',
     );
+  }
+
+  /// Etiqueta corta según el tipo (para el header del recuadro).
+  String get etiqueta {
+    switch (tipo) {
+      case 'alerta_stock':
+        return 'Stock bajo';
+      case 'sustituto':
+        return 'Alternativa';
+      case 'upgrade':
+        return 'Versión mejorada';
+      default:
+        return 'Sugerencia';
+    }
   }
 }
 

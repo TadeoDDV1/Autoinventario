@@ -18,7 +18,11 @@ func NewVentaRepository(db *sqlx.DB) *VentaRepository {
 }
 
 func (r *VentaRepository) Create(venta *models.VentaCreate) (int64, string, error) {
-	folio := fmt.Sprintf("V-%d", time.Now().UnixNano())
+	// Folio: V-YYMMDD-NNNNNN (18 chars max, encaja en VARCHAR(20))
+	// Más legible que UnixMilli y único por día+secuencia.
+	now := time.Now()
+	secOfDay := now.Hour()*3600 + now.Minute()*60 + now.Second()
+	folio := fmt.Sprintf("V-%s-%06d", now.Format("060102"), secOfDay)
 
 	tx, err := r.db.Beginx()
 	if err != nil {

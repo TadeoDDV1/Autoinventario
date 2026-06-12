@@ -511,15 +511,24 @@ func buscarProductosPorNombre(keywords []string, productos []ProductoCatalogo, l
 				continue
 			}
 			if contains(normalizeKeyword(p.Nombre), kwNorm) || contains(kwNorm, normalizeKeyword(p.Nombre)) {
-				out = append(out, Sugerencia{
-					Tipo:         "complemento",
-					ProductoID:   p.ID,
-					Nombre:       p.Nombre,
-					Precio:       p.Precio,
-					Razon:        "Compatible con " + kw,
-					StockActual:  p.Stock,
+				s := Sugerencia{
+					Tipo:          "complemento",
+					ProductoID:    p.ID,
+					Nombre:        p.Nombre,
+					Precio:        p.Precio,
+					Razon:         "Compatible con " + kw,
+					StockActual:   p.Stock,
 					NivelUrgencia: "medio",
-				})
+				}
+				// Enriquecer con descripción + compatibles desde base de conocimiento
+				if k := GetProductoConocimiento(normalizeKeyword(p.Nombre)); k != nil {
+					s.Descripcion = k.Descripcion
+					// Mapear nombres de compatibles a IDs del catálogo
+					if len(k.Compatibles) > 0 {
+						s.Compatibles = buscarIDsPorNombre(k.Compatibles, productos)
+					}
+				}
+				out = append(out, s)
 				if len(out) >= limite {
 					return out
 				}
@@ -527,6 +536,25 @@ func buscarProductosPorNombre(keywords []string, productos []ProductoCatalogo, l
 		}
 	}
 	return out
+}
+
+// buscarIDsPorNombre convierte una lista de nombres de productos a sus IDs
+// en el catálogo, usado para poblar el campo `Compatibles` de las sugerencias.
+func buscarIDsPorNombre(nombres []string, productos []ProductoCatalogo) []int {
+	ids := make([]int, 0, len(nombres))
+	for _, nombre := range nombres {
+		nombreNorm := normalizeKeyword(nombre)
+		for _, p := range productos {
+			if !p.Activo {
+				continue
+			}
+			if contains(normalizeKeyword(p.Nombre), nombreNorm) {
+				ids = append(ids, p.ID)
+				break // un match por nombre
+			}
+		}
+	}
+	return ids
 }
 
 // ── Copilot global (para reusar el LLMClient) ─────────────
