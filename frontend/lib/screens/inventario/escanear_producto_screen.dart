@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/format/money.dart';
 import '../../providers/producto_provider.dart';
@@ -66,6 +68,52 @@ class _EscanearProductoScreenState extends ConsumerState<EscanearProductoScreen>
       facing: CameraFacing.back,
     );
     _codigoController.addListener(_onCodigoChanged);
+    // Solicitar permiso de cámara en runtime (Android 6+).
+    // En desktop (Linux/Windows/macOS) la cámara no se usa; el flujo va por pistola HID.
+    if (_esMovil) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _solicitarPermisoCamara();
+      });
+    }
+  }
+
+  /// Pide el permiso de CAMERA en runtime. Si el usuario lo rechaza permanentemente
+  /// muestra un diálogo con un botón para abrir los ajustes del sistema.
+  Future<void> _solicitarPermisoCamara() async {
+    if (!mounted) return;
+    final status = await Permission.camera.request();
+    if (!mounted) return;
+    if (status.isPermanentlyDenied) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: const Icon(Icons.no_photography_outlined, size: 48),
+          title: const Text('Cámara bloqueada'),
+          content: const Text(
+            'Has bloqueado el permiso de cámara para esta app. '
+            'Para escanear productos por código de barras, abre los '
+            'ajustes del sistema y habilita el permiso de cámara.\n\n'
+            'También puedes escribir el código manualmente abajo.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                openAppSettings();
+              },
+              icon: const Icon(Icons.settings),
+              label: const Text('Abrir ajustes'),
+            ),
+          ],
+        ),
+      );
+    }
+    // Si está denied (no permanente) lo dejamos: el MobileScanner mostrará
+    // su errorBuilder con mensaje y el input manual sigue funcionando.
   }
 
   @override
@@ -96,6 +144,8 @@ class _EscanearProductoScreenState extends ConsumerState<EscanearProductoScreen>
     final value = capture.barcodes.firstOrNull?.rawValue;
     if (value == null || value.isEmpty) return;
     setState(() => _procesando = true);
+    // Feedback háptico: vibración breve al detectar código (solo móvil).
+    HapticFeedback.lightImpact();
     try {
       _scannerController.stop();
     } catch (_) {}

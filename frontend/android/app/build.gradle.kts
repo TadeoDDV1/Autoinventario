@@ -20,12 +20,13 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.ferreteria.ferreteria_app"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        // mobile_scanner ^5.x requiere minSdk >= 21.
+        // flutter_extension default: 24 (compilamos con 24 explícito para que no se rompa si Flutter cambia el default).
+        minSdk = 24
+        // targetSdk 34 = Play Store 2025 baseline (Flutter 3.41 default = 36, lo bajamos a 34 para
+        // mantener compatibilidad con permission_handler 11.x y evitar pedir POST_NOTIFICATIONS).
+        targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

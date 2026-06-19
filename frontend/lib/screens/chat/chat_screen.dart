@@ -3,17 +3,17 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/format/money.dart';
 import '../../providers/venta_provider.dart';
 import '../../services/chat_ejecutivo_service.dart';
-import '../../widgets/chat/tarjeta_sugerencia.dart';
+import '../../widgets/chat/burbuja_asistente.dart';
+import '../../widgets/chat/burbuja_escribiendo.dart';
 
 /// Chat IA conversacional de la ferretería.
 ///
-/// v2: Usa el endpoint `/ia/chat` con detección de intención en lenguaje
-/// natural. Soporta quick-prompts, sugerencias inline tappables, indicador
-/// de fuente IA (reglas vs LLM), markdown ligero y persistencia del
-/// historial de conversaciones.
+/// v3 (plan 2026-06-18): usa el endpoint `/ia/chat` con detección de intención,
+/// persiste la sesión activa en `shared_preferences`, atajos de teclado
+/// (Esc para volver, Ctrl+Enter para enviar), y la nueva burbuja del asistente
+/// con header/footer/acciones (Copiar) y burbuja de "escribiendo…".
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
 
@@ -24,12 +24,18 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _input = TextEditingController();
   final _scroll = ScrollController();
+  final _inputFocus = FocusNode();
   final _service = ChatEjecutivoService();
   final List<ChatMensaje> _mensajes = [];
-  final List<ChatRespuesta> _respuestas = []; // paralelo a _mensajes (los del asistente)
+  final List<ChatRespuesta> _respuestas = []; // paralelo a _mensajes (asistente)
   bool _cargando = false;
   bool _iaActiva = false;
+  // Nota: _fuenteIA se mantiene por compatibilidad con versiones previas
+  // del UI; la burbuja del asistente ahora muestra la fuente por respuesta.
+  // ignore: unused_field
   String _fuenteIA = 'reglas_locales';
+  // Para rehacer: guardamos el último mensaje del usuario.
+  String? _ultimoMensajeUsuario;
 
   // Quick prompts
   static const _quickPrompts = [
@@ -50,6 +56,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           'Toca una sugerencia rápida o escribe tu pregunta 👇',
     ));
     _cargarEstadoIA();
+    _cargarSesionActiva();
   }
 
   Future<void> _cargarEstadoIA() async {
@@ -60,6 +67,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         _fuenteIA = estado.fuente;
       });
     }
+  }
+
+  /// Re-hidrata la sesión activa (última conversación en curso) si existe.
+  Future<void> _cargarSesionActiva() async {
+    final sesion = await _service.cargarSesionActiva();
+    if (!mounted || sesion == null || sesion.mensajes.isEmpty) return;
+    // Reemplazar el mensaje de bienvenida sólo si hay algo real.
+    setState(() {
+      _mensajes
+        ..clear()
+        ..addAll(sesion.mensajes);
+      _respuestas
+        ..clear()
+        ..addAll(sesion.respuestas);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToEnd());
   }
 
   Future<void> _toggleIA(bool activo) async {
@@ -83,24 +106,72 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  /// Persiste la conversación en curso después de cada mensaje.
+  void _persistirSesion() {
+    _service.guardarSesionActiva(
+      mensajes: _mensajes,
+      respuestas: _respuestas,
+    );
+  }
+
+  /// Limpia la sesión activa y vuelve al mensaje de bienvenida.
+  Future<void> _borrarSesion() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Borrar conversación?'),
+        content: const Text(
+          'Se perderán los mensajes de esta conversación. '
+          'El historial de conversaciones anteriores se mantiene.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Borrar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true || !mounted) return;
+    await _service.borrarSesionActiva();
+    setState(() {
+      _mensajes
+        ..clear()
+        ..add(ChatMensaje(
+          esUsuario: false,
+          texto: '👋 Hola, soy tu asistente de ferretería.\n\n'
+              'Pregúntame sobre recomendaciones, usos, comparaciones o inventario.\n\n'
+              'Toca una sugerencia rápida o escribe tu pregunta 👇',
+        ));
+      _respuestas.clear();
+      _ultimoMensajeUsuario = null;
+    });
+  }
+
   @override
   void dispose() {
     _input.dispose();
     _scroll.dispose();
+    _inputFocus.dispose();
     super.dispose();
   }
 
-  Future<void> _enviar() async {
-    final txt = _input.text.trim();
+  Future<void> _enviar([String? textoForzado]) async {
+    final txt = (textoForzado ?? _input.text).trim();
     if (txt.isEmpty || _cargando) return;
     setState(() {
       _mensajes.add(ChatMensaje(texto: txt, esUsuario: true));
+      _ultimoMensajeUsuario = txt;
       _cargando = true;
       _input.clear();
     });
     _scrollToEnd();
 
-    // Historial previo (últimos 6)
+    // Historial previo (últimos 6 pares = 12 mensajes aprox)
     final historial = _mensajes.length > 12
         ? _mensajes.sublist(_mensajes.length - 12, _mensajes.length - 1)
         : _mensajes.sublist(0, _mensajes.length - 1);
@@ -121,6 +192,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _fuenteIA = resp.fuente;
     });
     _scrollToEnd();
+    _persistirSesion();
   }
 
   void _scrollToEnd() {
@@ -138,6 +210,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _usarQuickPrompt(String prompt) {
     _input.text = prompt;
     _enviar();
+  }
+
+  /// Atajo Ctrl+Enter / Esc vía KeyEvent (a nivel de Scaffold).
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    // Esc → volver
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go('/dashboard');
+      }
+      return KeyEventResult.handled;
+    }
+    // Ctrl+Enter → enviar
+    final isCtrl = HardwareKeyboard.instance.isControlPressed;
+    if (isCtrl && event.logicalKey == LogicalKeyboardKey.enter) {
+      _enviar();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   @override
@@ -171,6 +264,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ],
             ),
           ),
+          if (_mensajes.length > 1)
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Borrar conversación actual',
+              onPressed: _borrarSesion,
+            ),
           IconButton(
             icon: const Icon(Icons.history),
             tooltip: 'Historial',
@@ -178,367 +277,158 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Quick prompts
-          if (_mensajes.length <= 1) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: _quickPrompts
-                    .map((p) => ActionChip(
-                          label: Text(p, style: const TextStyle(fontSize: 12)),
-                          onPressed: () => _usarQuickPrompt(p),
-                          backgroundColor: theme.colorScheme.primaryContainer,
-                        ))
-                    .toList(),
+      body: Focus(
+        autofocus: true,
+        onKeyEvent: _onKey,
+        child: Column(
+          children: [
+            // Quick prompts (sólo al inicio, cuando sólo hay el mensaje de bienvenida)
+            if (_mensajes.length <= 1) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: _quickPrompts
+                      .map((p) => ActionChip(
+                            label: Text(p, style: const TextStyle(fontSize: 12)),
+                            onPressed: () => _usarQuickPrompt(p),
+                            backgroundColor: theme.colorScheme.primaryContainer,
+                          ))
+                      .toList(),
+                ),
+              ),
+            ],
+
+            Expanded(
+              child: ListView.builder(
+                controller: _scroll,
+                padding: const EdgeInsets.all(12),
+                itemCount: _mensajes.length,
+                itemBuilder: (ctx, i) {
+                  final msg = _mensajes[i];
+                  if (msg.esUsuario) {
+                    return _BurbujaUsuario(texto: msg.texto);
+                  }
+                  // Es respuesta del asistente: la nueva BurbujaAsistente.
+                  // índice de respuesta = i ~/ 2 (los pares usuario+asistente).
+                  final respuesta = _respuestas.elementAtOrNull(i ~/ 2);
+                  final esUltima = i == _mensajes.length - 1;
+                  return BurbujaAsistente(
+                    mensaje: msg,
+                    respuesta: respuesta,
+                    onRehacer: _ultimoMensajeUsuario == null
+                        ? null
+                        : () => _enviar(_ultimoMensajeUsuario),
+                    esUltima: esUltima,
+                  );
+                },
               ),
             ),
-          ],
+            // Esqueleto "escribiendo…" (reemplaza al viejo _PensandoDots inferior)
+            if (_cargando) const BurbujaEscribiendo(),
 
-          Expanded(
-            child: ListView.builder(
-              controller: _scroll,
-              padding: const EdgeInsets.all(12),
-              itemCount: _mensajes.length,
-              itemBuilder: (ctx, i) {
-                final msg = _mensajes[i];
-                final respuesta = msg.esUsuario ? null : _respuestas.elementAtOrNull(i ~/ 2);
-                return _Burbuja(
-                  msg: msg,
-                  respuesta: respuesta,
-                );
-              },
-            ),
-          ),
-          if (_cargando)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                border: Border(
+                  top: BorderSide(color: theme.colorScheme.outlineVariant),
+                ),
+              ),
               child: Row(
                 children: [
-                  _PensandoDots(),
-                  SizedBox(width: 12),
-                  Text('Pensando…'),
+                  Expanded(
+                    child: TextField(
+                      controller: _input,
+                      focusNode: _inputFocus,
+                      onSubmitted: (_) => _enviar(),
+                      decoration: InputDecoration(
+                        hintText: 'Pregúntame algo…  (Ctrl+Enter)',
+                        filled: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                      textInputAction: TextInputAction.send,
+                      maxLines: null,
+                      textCapitalization: TextCapitalization.sentences,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: _cargando ? null : _enviar,
+                    style: FilledButton.styleFrom(
+                      shape: const CircleBorder(),
+                      padding: const EdgeInsets.all(16),
+                    ),
+                    child: const Icon(Icons.send),
+                  ),
                 ],
               ),
             ),
-          Container(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              border: Border(
-                top: BorderSide(color: theme.colorScheme.outlineVariant),
-              ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _input,
-                    onSubmitted: (_) => _enviar(),
-                    decoration: InputDecoration(
-                      hintText: 'Pregúntame algo…',
-                      filled: true,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                    ),
-                    textInputAction: TextInputAction.send,
-                    maxLines: null,
-                    textCapitalization: TextCapitalization.sentences,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: _cargando ? null : _enviar,
-                  style: FilledButton.styleFrom(
-                    shape: const CircleBorder(),
-                    padding: const EdgeInsets.all(16),
-                  ),
-                  child: const Icon(Icons.send),
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-class _Burbuja extends StatelessWidget {
-  final ChatMensaje msg;
-  final ChatRespuesta? respuesta;
-  const _Burbuja({required this.msg, this.respuesta});
+/// Burbuja del usuario (lado derecho). Sin cambios respecto a v2.
+class _BurbujaUsuario extends StatelessWidget {
+  final String texto;
+  const _BurbujaUsuario({required this.texto});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final align = msg.esUsuario ? Alignment.centerRight : Alignment.centerLeft;
-    final color = msg.esUsuario
-        ? theme.colorScheme.primary
-        : theme.colorScheme.surfaceContainerHighest;
-    final textColor = msg.esUsuario
-        ? theme.colorScheme.onPrimary
-        : theme.colorScheme.onSurface;
-
     return Container(
-      alignment: align,
+      alignment: Alignment.centerRight,
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.85,
         ),
-        child: Column(
-          crossAxisAlignment:
-              msg.esUsuario ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (!msg.esUsuario)
-                  CircleAvatar(
-                    radius: 14,
-                    backgroundColor: theme.colorScheme.primaryContainer,
-                    child: Icon(Icons.auto_awesome,
-                        size: 16, color: theme.colorScheme.onPrimaryContainer),
-                  ),
-                if (!msg.esUsuario) const SizedBox(width: 8),
-                Flexible(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: color,
-                      borderRadius: BorderRadius.only(
-                        topLeft: const Radius.circular(16),
-                        topRight: const Radius.circular(16),
-                        bottomLeft: Radius.circular(msg.esUsuario ? 16 : 4),
-                        bottomRight: Radius.circular(msg.esUsuario ? 4 : 16),
-                      ),
-                    ),
-                    child: _MarkdownLight(
-                      texto: msg.texto,
-                      color: textColor,
-                    ),
+            Flexible(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                    bottomLeft: Radius.circular(16),
+                    bottomRight: Radius.circular(4),
                   ),
                 ),
-                if (msg.esUsuario) const SizedBox(width: 8),
-                if (msg.esUsuario)
-                  CircleAvatar(
-                    radius: 14,
-                    backgroundColor: theme.colorScheme.secondaryContainer,
-                    child: Icon(Icons.person,
-                        size: 16, color: theme.colorScheme.onSecondaryContainer),
-                  ),
-              ],
-            ),
-            // Fuente IA + sugerencias (solo para respuestas del asistente)
-            if (respuesta != null) ...[
-              const SizedBox(height: 4),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: respuesta!.fuente == 'llm'
-                          ? Colors.deepPurple.shade50
-                          : theme.colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          respuesta!.fuente == 'llm' ? Icons.psychology : Icons.bolt,
-                          size: 12,
-                          color: respuesta!.fuente == 'llm'
-                              ? Colors.deepPurple
-                              : theme.colorScheme.outline,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          respuesta!.fuente == 'llm'
-                              ? 'LLM'
-                              : (respuesta!.fuente == 'reglas' ? 'Local' : respuesta!.fuente),
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: respuesta!.fuente == 'llm'
-                                ? Colors.deepPurple.shade700
-                                : theme.colorScheme.outline,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (respuesta!.intencion.isNotEmpty) ...[
-                    const SizedBox(width: 6),
-                    Text(
-                      '· ${respuesta!.intencion}',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: theme.colorScheme.outline,
-                      ),
-                    ),
-                  ],
-                ],
+                child: SelectableText(
+                  texto,
+                  style: TextStyle(color: theme.colorScheme.onPrimary),
+                ),
               ),
-              if (respuesta!.sugerencias.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: respuesta!.sugerencias
-                      .map((s) => TarjetaSugerencia(sugerencia: s))
-                      .toList(),
-                ),
-              ],
-            ],
+            ),
+            const SizedBox(width: 8),
+            CircleAvatar(
+              radius: 14,
+              backgroundColor: theme.colorScheme.secondaryContainer,
+              child: Icon(
+                Icons.person,
+                size: 16,
+                color: theme.colorScheme.onSecondaryContainer,
+              ),
+            ),
           ],
         ),
       ),
-    );
-  }
-}
-
-/// Renderiza un texto con **negritas**, *cursivas*, bullets y saltos de línea.
-class _MarkdownLight extends StatelessWidget {
-  final String texto;
-  final Color color;
-  const _MarkdownLight({required this.texto, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final baseStyle = TextStyle(color: color, height: 1.35);
-    final boldStyle = baseStyle.copyWith(fontWeight: FontWeight.bold);
-    final italicStyle = baseStyle.copyWith(fontStyle: FontStyle.italic);
-
-    final lines = texto.split('\n');
-    final spans = <InlineSpan>[];
-
-    for (var i = 0; i < lines.length; i++) {
-      final line = lines[i];
-      if (line.isEmpty) {
-        spans.add(const TextSpan(text: '\n'));
-        continue;
-      }
-      // Bullets
-      var remaining = line;
-      bool isBullet = false;
-      if (remaining.startsWith('• ') || remaining.startsWith('- ')) {
-        isBullet = true;
-        remaining = remaining.substring(2);
-      }
-      // Parsear **bold** y *italic*
-      int idx = 0;
-      final lineSpans = <InlineSpan>[];
-      while (idx < remaining.length) {
-        if (idx + 1 < remaining.length && remaining.substring(idx, idx + 2) == '**') {
-          final end = remaining.indexOf('**', idx + 2);
-          if (end > 0) {
-            lineSpans.add(TextSpan(
-              text: remaining.substring(idx + 2, end),
-              style: boldStyle,
-            ));
-            idx = end + 2;
-            continue;
-          }
-        }
-        if (remaining[idx] == '*') {
-          final end = remaining.indexOf('*', idx + 1);
-          if (end > 0) {
-            lineSpans.add(TextSpan(
-              text: remaining.substring(idx + 1, end),
-              style: italicStyle,
-            ));
-            idx = end + 1;
-            continue;
-          }
-        }
-        // Acumular hasta el siguiente *
-        int next = idx + 1;
-        while (next < remaining.length && remaining[next] != '*' && remaining.substring(next, next > remaining.length - 1 ? next : next + 1) != '**') {
-          // buscar el siguiente * o **
-          if (next + 1 < remaining.length && remaining[next] == '*' && remaining[next + 1] == '*') break;
-          if (remaining[next] == '*') break;
-          next++;
-        }
-        if (next == idx) next = idx + 1;
-        lineSpans.add(TextSpan(text: remaining.substring(idx, next), style: baseStyle));
-        idx = next;
-      }
-
-      if (isBullet) {
-        spans.add(const TextSpan(text: '• '));
-      }
-      spans.addAll(lineSpans);
-      if (i < lines.length - 1) {
-        spans.add(const TextSpan(text: '\n'));
-      }
-    }
-
-    return SelectableText.rich(
-      TextSpan(style: baseStyle, children: spans),
-      style: baseStyle,
-    );
-  }
-}
-
-class _PensandoDots extends StatefulWidget {
-  const _PensandoDots();
-  @override
-  State<_PensandoDots> createState() => _PensandoDotsState();
-}
-
-class _PensandoDotsState extends State<_PensandoDots> with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1100),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _ctrl,
-      builder: (_, __) {
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: List.generate(3, (i) {
-            final phase = (_ctrl.value - i * 0.2) % 1.0;
-            final opacity = phase < 0.5 ? phase * 2 : (1 - phase) * 2;
-            return Container(
-              margin: const EdgeInsets.symmetric(horizontal: 2),
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: opacity.clamp(0.2, 1.0)),
-              ),
-            );
-          }),
-        );
-      },
     );
   }
 }

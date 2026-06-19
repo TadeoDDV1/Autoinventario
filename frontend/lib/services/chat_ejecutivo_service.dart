@@ -246,6 +246,86 @@ class ChatEjecutivoService {
       await prefs.remove(_historialKey);
     } catch (_) {}
   }
+
+  // ── Sesión activa (la conversación en curso, NO el historial completo) ──
+
+  static const _sesionKey = 'chat_sesion_activa';
+
+  /// Guarda la conversación en curso (mensajes + respuestas paralelas).
+  /// Se re-hidrata al volver a abrir la pantalla de chat.
+  Future<void> guardarSesionActiva({
+    required List<ChatMensaje> mensajes,
+    required List<ChatRespuesta> respuestas,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // Construir pares (mensaje_usuario, respuesta_asistente) para re-hidratar fácil.
+      final pares = <Map<String, dynamic>>[];
+      for (var i = 0; i < mensajes.length; i++) {
+        final m = mensajes[i];
+        // Cada respuesta del asistente corresponde a un mensaje del usuario previo.
+        // Las respuestas[] está paralela al log: índice j -> respuesta del asistente j-ésima.
+        // Aquí serializamos un solo objeto con texto y fuente.
+        pares.add({
+          'texto': m.texto,
+          'esUsuario': m.esUsuario,
+          'timestamp': m.timestamp.toIso8601String(),
+        });
+      }
+      final data = {
+        'mensajes': pares,
+        // Guardamos respuestas aplanadas (sin objetos Sugerencia complejos,
+        // basta con la lista de nombres para re-mostrar las tarjetas).
+        'respuestas': respuestas.map((r) => {
+              'texto': r.texto,
+              'fuente': r.fuente,
+              'intencion': r.intencion,
+              'sugerencias_nombres': r.sugerencias.map((s) => s.nombre).toList(),
+            }).toList(),
+        'updatedAt': DateTime.now().toIso8601String(),
+      };
+      await prefs.setString(_sesionKey, jsonEncode(data));
+    } catch (_) {
+      // Silenciar errores de persistencia
+    }
+  }
+
+  /// Carga la sesión activa guardada, o null si no hay.
+  /// Las respuestas no se re-hidratan completas (sin objetos Sugerencia),
+  /// sólo el texto plano y metadatos para re-mostrar la burbuja.
+  Future<ChatSesionActiva?> cargarSesionActiva() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_sesionKey);
+      if (raw == null) return null;
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      final mensajes = (data['mensajes'] as List<dynamic>)
+          .map((j) => ChatMensaje.fromJson(j as Map<String, dynamic>))
+          .toList();
+      final respuestas = (data['respuestas'] as List<dynamic>).map((j) {
+        final m = j as Map<String, dynamic>;
+        return ChatRespuesta(
+          texto: m['texto'] as String? ?? '',
+          tipo: ChatTipo.texto,
+          fuente: m['fuente'] as String? ?? 'reglas_locales',
+          intencion: m['intencion'] as String? ?? '',
+          // Las sugerencias detalladas no se restauran (sólo los nombres) —
+          // quedan como [] y la burbuja se ve sin tarjetas en re-hidratación.
+          sugerencias: const [],
+        );
+      }).toList();
+      return ChatSesionActiva(mensajes: mensajes, respuestas: respuestas);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> borrarSesionActiva() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_sesionKey);
+    } catch (_) {}
+  }
 }
 
 enum ChatTipo { texto }
@@ -367,4 +447,11 @@ class SugerenciaProducto {
       fuente: (json['fuente'] as String?) ?? 'desconocido',
     );
   }
+}
+
+/// Estructura devuelta por [ChatEjecutivoService.cargarSesionActiva].
+class ChatSesionActiva {
+  final List<ChatMensaje> mensajes;
+  final List<ChatRespuesta> respuestas;
+  ChatSesionActiva({required this.mensajes, required this.respuestas});
 }
