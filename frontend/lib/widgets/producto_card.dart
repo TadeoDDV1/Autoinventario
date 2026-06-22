@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/format/money.dart';
 import '../../models/producto.dart';
+import 'inventario/uso_tooltip.dart';
 
 class ProductoCard extends StatelessWidget {
   final Producto producto;
@@ -126,6 +127,10 @@ class ProductoCard extends StatelessWidget {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
+                              ),
+                              UsoTooltipButton(
+                                nombreProducto: producto.nombre,
+                                categoriaNombre: producto.categoriaNombre,
                               ),
                               PopupMenuButton<String>(
                                 icon: const Icon(Icons.more_vert, size: 20),

@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/format/money.dart';
 import '../../models/producto.dart';
-import '../../models/sugerencia.dart';
 import '../../providers/ia_provider.dart';
-import '../../providers/producto_provider.dart';
 import '../../providers/venta_provider.dart';
+import '../chat/tarjeta_sugerencia.dart';
 
 /// Panel colapsable de sugerencias IA en el POS.
 /// Se muestra debajo del input de código, con animación de entrada/salida.
@@ -39,59 +37,11 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel>
     super.dispose();
   }
 
-  Future<void> _agregarAlCarrito(Sugerencia sug) async {
-    try {
-      final api = ref.read(apiServiceProvider);
-      final producto = await api.getProductoById(sug.productoId);
-      if (!mounted) return;
-      ref.read(carritoProvider.notifier).agregarProducto(producto);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${sug.nombre} agregado'),
-          backgroundColor: Colors.green.shade700,
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('No se pudo agregar: $e'),
-          backgroundColor: Colors.red.shade700,
-        ),
-      );
-    }
-  }
-
-  IconData _iconForTipo(String tipo) {
-    switch (tipo) {
-      case 'alerta_stock':
-        return Icons.warning_amber_rounded;
-      case 'sustituto':
-        return Icons.swap_horiz;
-      default:
-        return Icons.add_circle_outline;
-    }
-  }
-
-  Color _colorForTipo(String tipo, ThemeData theme) {
-    switch (tipo) {
-      case 'alerta_stock':
-        return Colors.orange.shade700;
-      case 'sustituto':
-        return Colors.blue.shade700;
-      default:
-        return theme.colorScheme.primary;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final sugerenciasAsync = ref.watch(copilotSugerenciasProvider);
     final carritoCount = ref.watch(carritoCantidadProvider);
-    final formatter = money;
 
     // No mostrar nada si el carrito está vacío
     if (carritoCount == 0) {
@@ -192,14 +142,7 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel>
                             padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                             child: Column(
                               children: response.sugerencias
-                                  .map((s) => _SugerenciaTile(
-                                        sugerencia: s,
-                                        icon: _iconForTipo(s.tipo),
-                                        color: _colorForTipo(s.tipo, theme),
-                                        precioFormateado:
-                                            formatter.format(s.precio),
-                                        onAgregar: () => _agregarAlCarrito(s),
-                                      ))
+                                  .map((s) => TarjetaSugerencia(sugerencia: s))
                                   .toList(),
                             ),
                           )
@@ -212,86 +155,7 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel>
         );
       },
       loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
-    );
-  }
-}
-
-class _SugerenciaTile extends StatelessWidget {
-  final Sugerencia sugerencia;
-  final IconData icon;
-  final Color color;
-  final String precioFormateado;
-  final VoidCallback onAgregar;
-
-  const _SugerenciaTile({
-    required this.sugerencia,
-    required this.icon,
-    required this.color,
-    required this.precioFormateado,
-    required this.onAgregar,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Material(
-        color: theme.colorScheme.surface.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          onTap: onAgregar,
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Row(
-              children: [
-                Icon(icon, color: color, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        sugerencia.nombre,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        sugerencia.razon,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                          fontStyle: FontStyle.italic,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  precioFormateado,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Icon(
-                  Icons.add_circle,
-                  color: color,
-                  size: 20,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      error: (_, _) => const SizedBox.shrink(),
     );
   }
 }
