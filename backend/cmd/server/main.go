@@ -15,6 +15,7 @@ import (
 	"github.com/ferreteria/backend/config"
 	"github.com/ferreteria/backend/internal/handler"
 	"github.com/ferreteria/backend/internal/ia"
+	"github.com/ferreteria/backend/internal/pagos"
 	"github.com/ferreteria/backend/internal/repository"
 	"github.com/ferreteria/backend/internal/router"
 	"github.com/ferreteria/backend/internal/service"
@@ -58,7 +59,22 @@ func main() {
 		chatHandler.RefrescarProductos()
 	}()
 
-	r := router.SetupRouter(productoHandler, ventaHandler, entradaHandler, iaHandler, syncHandler, chatHandler)
+	// Módulo de pagos (Stripe Fase 1A, multi-proveedor a futuro).
+	// Si no hay claves configuradas, el manager arranca sin drivers y los
+	// endpoints devolverán 503 PROVIDER_UNAVAILABLE — el server sigue arriba.
+	pagosMgr, err := pagos.NewManager(pagos.ManagerConfig{
+		Principal:           os.Getenv("PAGOS_PROVEEDOR_PRINCIPAL"),
+		StripeSecretKey:     os.Getenv("STRIPE_SECRET_KEY"),
+		StripeWebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),
+	})
+	if err != nil {
+		slog.Error("pagos_manager_init_failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+	pagosRepo := repository.NewPagoRepository(db)
+	pagosHandler := pagos.NewHandler(pagosMgr, pagosRepo, ventaRepo)
+
+	r := router.SetupRouter(productoHandler, ventaHandler, entradaHandler, iaHandler, syncHandler, chatHandler, pagosHandler)
 
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {

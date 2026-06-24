@@ -11,6 +11,7 @@ type Venta struct {
 	MetodoPago    string         `json:"metodo_pago" db:"metodo_pago"`
 	MontoRecibido *float64       `json:"monto_recibido" db:"monto_recibido"`
 	Cambio        *float64       `json:"cambio" db:"cambio"`
+	ReferenciaPago *string       `json:"referencia_pago,omitempty" db:"referencia_pago"`
 	CreatedAt     time.Time      `json:"created_at" db:"created_at"`
 	Detalles      []DetalleVenta `json:"detalles,omitempty"`
 }
@@ -30,9 +31,10 @@ type VentaCreate struct {
 	Subtotal       float64             `json:"subtotal" validate:"required,gte=0"`
 	Iva            float64             `json:"iva" validate:"required,gte=0"`
 	Total          float64             `json:"total" validate:"required,gt=0"`
-	MetodoPago     string              `json:"metodo_pago" validate:"required,oneof=efectivo tarjeta"`
+	MetodoPago     string              `json:"metodo_pago" validate:"required,oneof=efectivo tarjeta transferencia mixto"`
 	MontoRecibido  *float64            `json:"monto_recibido"`
 	Cambio         *float64            `json:"cambio"`
+	ReferenciaPago *string             `json:"referencia_pago,omitempty"`
 }
 
 type DetalleVentaCreate struct {

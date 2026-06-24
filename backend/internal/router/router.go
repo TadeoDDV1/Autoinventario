@@ -9,12 +9,13 @@ import (
 
 	"github.com/ferreteria/backend/internal/handler"
 	"github.com/ferreteria/backend/internal/ia"
+	"github.com/ferreteria/backend/internal/pagos"
 	"github.com/gin-gonic/gin"
 )
 
 const RequestIDHeader = "X-Request-ID"
 
-func SetupRouter(productoHandler *handler.ProductoHandler, ventaHandler *handler.VentaHandler, entradaHandler *handler.EntradaHandler, iaHandler *ia.Handler, syncHandler *ia.SyncHandler, chatHandler *ia.ChatHandler) *gin.Engine {
+func SetupRouter(productoHandler *handler.ProductoHandler, ventaHandler *handler.VentaHandler, entradaHandler *handler.EntradaHandler, iaHandler *ia.Handler, syncHandler *ia.SyncHandler, chatHandler *ia.ChatHandler, pagosHandler *pagos.Handler) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -86,6 +87,19 @@ func SetupRouter(productoHandler *handler.ProductoHandler, ventaHandler *handler
 
 		// Sync batch (ventas offline)
 		api.POST("/sync/ventas", syncHandler.SyncVentas)
+
+		// Pagos (Stripe Fase 1A + multi-proveedor a futuro)
+		// El webhook vive en su propio grupo para que CORS/logging se apliquen igual
+		// pero sin requerir auth (los webhooks llegan sin Authorization header).
+		pagosGroup := api.Group("/pagos")
+		{
+			pagosGroup.GET("/providers", pagosHandler.ListProviders)
+			pagosGroup.POST("/charges", pagosHandler.CreateCharge)
+			pagosGroup.GET("/charges/:referencia", pagosHandler.GetCharge)
+			pagosGroup.POST("/charges/:referencia/refund", pagosHandler.Refund)
+			pagosGroup.GET("/venta/:venta_id", pagosHandler.ListByVenta)
+			pagosGroup.POST("/webhook", pagosHandler.Webhook)
+		}
 	}
 
 	return r
