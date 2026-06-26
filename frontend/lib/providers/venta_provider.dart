@@ -157,6 +157,22 @@ class CarritoNotifier extends Notifier<List<CarritoItem>> {
     state = [];
     _saveToStorage();
   }
+
+  /// Reordena un item dentro del carrito. Sigue la convención de
+  /// [ReorderableListView]: si el destino está después del origen, el índice
+  /// que llega en [newIndex] ya fue decrementado por el framework, así que
+  /// se descuenta 1 para reinsertar en la posición lógica correcta.
+  void reordenar(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= state.length) return;
+    if (newIndex < 0 || newIndex > state.length) return;
+    if (oldIndex == newIndex) return;
+    final item = state[oldIndex];
+    final nuevaLista = [...state]..removeAt(oldIndex);
+    final destino = newIndex > oldIndex ? newIndex - 1 : newIndex;
+    nuevaLista.insert(destino.clamp(0, nuevaLista.length), item);
+    state = nuevaLista;
+    _saveToStorage();
+  }
 }
 
 final carritoProvider =

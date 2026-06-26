@@ -35,6 +35,10 @@ class _NuevoProductoIntent extends Intent {
   const _NuevoProductoIntent();
 }
 
+class _OpenPagoIntent extends Intent {
+  const _OpenPagoIntent();
+}
+
 class CajaScreen extends ConsumerStatefulWidget {
   const CajaScreen({super.key});
 
@@ -45,6 +49,8 @@ class CajaScreen extends ConsumerStatefulWidget {
 class _CajaScreenState extends ConsumerState<CajaScreen> {
   final FocusNode _shortcutFocus = FocusNode(debugLabel: 'CajaShortcuts');
   final FocusNode _inputFocus = FocusNode(debugLabel: 'CajaBarcodeInput');
+  final GlobalKey<QuickCartSummaryState> _cartKey =
+      GlobalKey<QuickCartSummaryState>();
 
   @override
   void initState() {
@@ -93,6 +99,10 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
     context.go('/inventario/nuevo');
   }
 
+  void _abrirCobroRapido() {
+    _cartKey.currentState?.abrirDialogoCobroRapido();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -111,6 +121,8 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
             _OpenChatIntent(),
         const SingleActivator(LogicalKeyboardKey.keyN, control: true):
             _NuevoProductoIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyP, control: true):
+            _OpenPagoIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
@@ -151,6 +163,12 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
           _NuevoProductoIntent: CallbackAction<_NuevoProductoIntent>(
             onInvoke: (_) {
               _nuevoProducto();
+              return null;
+            },
+          ),
+          _OpenPagoIntent: CallbackAction<_OpenPagoIntent>(
+            onInvoke: (_) {
+              _abrirCobroRapido();
               return null;
             },
           ),
@@ -247,6 +265,7 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
                           ),
                         ),
                         child: QuickCartSummary(
+                          key: _cartKey,
                           onLimpiar: () =>
                               ref.read(carritoProvider.notifier).vaciar(),
                         ),
@@ -265,6 +284,7 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
                       ),
                       if (carritoCantidad > 0)
                         QuickCartSummary(
+                          key: _cartKey,
                           onLimpiar: () =>
                               ref.read(carritoProvider.notifier).vaciar(),
                         ),
