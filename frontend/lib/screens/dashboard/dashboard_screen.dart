@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -6,10 +7,20 @@ import 'package:intl/intl.dart';
 import '../../core/format/money.dart';
 import '../../models/sugerencia.dart';
 import '../../providers/ia_provider.dart';
+import '../../widgets/dashboard/dashboard_constants.dart';
+import '../../widgets/dashboard/dashboard_layout.dart';
 import '../../widgets/dashboard/dashboard_shimmer.dart';
+import '../../widgets/dashboard/metrica_principal_card.dart';
+import '../../widgets/dashboard/metrica_secundaria_card.dart';
+import '../../widgets/dashboard/seccion_header.dart';
+import '../../widgets/dashboard/stock_alert_list.dart';
+import '../../widgets/dashboard/top_productos_list.dart';
+import '../../widgets/dashboard/variacion_badge.dart';
+import '../../widgets/dashboard/ventas_chart.dart';
 
-/// Dashboard ejecutivo de inicio. Muestra resumen del día, top productos
-/// y alertas de stock. Reemplaza la vista vacía anterior con información útil.
+/// Dashboard ejecutivo de inicio. Orquestador: compone los widgets
+/// extraídos en `widgets/dashboard/` con un layout responsivo que
+/// se adapta a mobile/tablet/desktop. Sin lógica de pintado propia.
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
@@ -17,36 +28,45 @@ class DashboardScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final resumenAsync = ref.watch(dashboardProvider);
+    final width = MediaQuery.of(context).size.width;
+    final variant = dashboardVariantDe(width);
 
     return RefreshIndicator(
       onRefresh: () async => ref.invalidate(dashboardProvider),
       child: resumenAsync.when(
-        data: (resumen) => _buildContent(context, ref, theme, resumen),
+        data: (resumen) => _buildContent(context, ref, theme, resumen, variant),
         loading: () => const DashboardShimmer(),
-        error: (e, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.cloud_off,
-                    size: 64, color: theme.colorScheme.outline),
-                const SizedBox(height: 16),
-                Text('No se pudo cargar el dashboard',
-                    style: theme.textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Text('$e',
-                    style: theme.textTheme.bodySmall,
-                    textAlign: TextAlign.center),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: () => ref.invalidate(dashboardProvider),
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Reintentar'),
-                ),
-              ],
+        error: (e, _) => _buildError(context, ref, theme, e),
+      ),
+    );
+  }
+
+  Widget _buildError(
+    BuildContext context,
+    WidgetRef ref,
+    ThemeData theme,
+    Object e,
+  ) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(DashboardSpacing.xl),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.cloud_off, size: 64, color: theme.colorScheme.outline),
+            const SizedBox(height: DashboardSpacing.lg),
+            Text('No se pudo cargar el dashboard',
+                style: theme.textTheme.titleMedium),
+            const SizedBox(height: DashboardSpacing.sm),
+            Text('$e',
+                style: theme.textTheme.bodySmall, textAlign: TextAlign.center),
+            const SizedBox(height: DashboardSpacing.lg),
+            FilledButton.icon(
+              onPressed: () => ref.invalidate(dashboardProvider),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reintentar'),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -57,466 +77,273 @@ class DashboardScreen extends ConsumerWidget {
     WidgetRef ref,
     ThemeData theme,
     DashboardResumen resumen,
+    DashboardLayoutVariant variant,
   ) {
     final formatter = money;
-    final isPositive = resumen.variacionPct >= 0;
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        // Header con saludo
-        Row(
+    final maxWidth = variant == DashboardLayoutVariant.mobile
+        ? double.infinity
+        : (variant == DashboardLayoutVariant.tablet ? 720.0 : 1100.0);
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: ListView(
+          padding: const EdgeInsets.all(DashboardSpacing.lg),
           children: [
-            Icon(Icons.dashboard, color: theme.colorScheme.primary, size: 28),
-            const SizedBox(width: 12),
-            Text(
-              'DASHBOARD',
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.2,
-              ),
-            ),
-            const Spacer(),
-            IconButton(
-              onPressed: () => context.push('/chat'),
-              icon: const Icon(Icons.chat_bubble_outline),
-              tooltip: 'Asistente ejecutivo',
-            ),
-            IconButton(
-              onPressed: () => ref.invalidate(dashboardProvider),
-              icon: const Icon(Icons.refresh),
-              tooltip: 'Actualizar',
-            ),
+            _buildHeader(context, ref, theme, resumen),
+            const SizedBox(height: DashboardSpacing.lg),
+            _buildMetricasRow(context, resumen, formatter, variant),
+            if (variant == DashboardLayoutVariant.desktop) ...[
+              const SizedBox(height: DashboardSpacing.lg),
+              _buildTopYChartRow(context, ref, resumen),
+            ] else ...[
+              const SizedBox(height: DashboardSpacing.xl),
+              _buildTopProductos(context, ref, resumen),
+              const SizedBox(height: DashboardSpacing.xl),
+              _buildStockAlertas(context, resumen),
+              const SizedBox(height: DashboardSpacing.xl),
+              _buildChart(context, resumen),
+            ],
+            const SizedBox(height: DashboardSpacing.xl),
           ],
         ),
-        const SizedBox(height: 8),
-        Text(
-          _saludo() + ' • ${resumen.fecha}',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 20),
-
-        // Cards de métricas principales
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 1.5,
-          children: [
-            _MetricaCard(
-              titulo: 'Ventas hoy',
-              valor: formatter.format(resumen.ventasHoy),
-              icon: Icons.payments,
-              color: Colors.green.shade600,
-              subtitulo: '${resumen.transaccionesHoy} transacciones',
-            ),
-            _MetricaCard(
-              titulo: 'Ticket promedio',
-              valor: formatter.format(resumen.ticketPromedio),
-              icon: Icons.receipt,
-              color: Colors.blue.shade600,
-              subtitulo: 'por venta',
-            ),
-            _MetricaCard(
-              titulo: 'Efectivo',
-              valor: formatter.format(resumen.ventasEfectivo),
-              icon: Icons.money,
-              color: Colors.amber.shade700,
-              subtitulo: 'recaudado',
-            ),
-            _MetricaCard(
-              titulo: 'Tarjeta',
-              valor: formatter.format(resumen.ventasTarjeta),
-              icon: Icons.credit_card,
-              color: Colors.purple.shade600,
-              subtitulo: 'recaudado',
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 20),
-
-        // Variación vs ayer
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: isPositive
-                ? Colors.green.shade50
-                : (resumen.variacionPct < 0
-                    ? Colors.red.shade50
-                    : theme.colorScheme.surfaceContainerHighest),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isPositive
-                  ? Colors.green.shade200
-                  : (resumen.variacionPct < 0
-                      ? Colors.red.shade200
-                      : theme.colorScheme.outlineVariant),
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                isPositive
-                    ? Icons.trending_up
-                    : (resumen.variacionPct < 0
-                        ? Icons.trending_down
-                        : Icons.trending_flat),
-                color: isPositive
-                    ? Colors.green.shade700
-                    : (resumen.variacionPct < 0
-                        ? Colors.red.shade700
-                        : Colors.grey.shade600),
-                size: 32,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Variación vs ayer',
-                      style: theme.textTheme.labelMedium,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      resumen.variacionPct == 0
-                          ? 'Sin variación'
-                          : '${isPositive ? '+' : ''}${resumen.variacionPct.toStringAsFixed(1)}%',
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: isPositive
-                            ? Colors.green.shade800
-                            : (resumen.variacionPct < 0
-                                ? Colors.red.shade800
-                                : null),
-                      ),
-                    ),
-                    Text(
-                      'Ayer: ${formatter.format(resumen.ventasAyer)}',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 24),
-
-        // Top productos
-        if (resumen.topProductos.isNotEmpty) ...[
-          _SeccionHeader(
-            titulo: 'Top productos hoy',
-            icon: Icons.star,
-          ),
-          const SizedBox(height: 8),
-          ...resumen.topProductos.asMap().entries.map((entry) {
-            final i = entry.key;
-            final p = entry.value;
-            return Card(
-              margin: const EdgeInsets.only(bottom: 6),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: theme.colorScheme.primaryContainer,
-                  child: Text(
-                    '${i + 1}',
-                    style: TextStyle(
-                      color: theme.colorScheme.onPrimaryContainer,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                title: Text(p.nombre),
-                subtitle: Text('${p.cantidad} unidades'),
-                trailing: Text(
-                  formatter.format(p.totalVenta),
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            );
-          }),
-        ] else
-          _EmptyHint(
-            icon: Icons.shopping_bag,
-            mensaje: 'Aún no hay ventas hoy',
-            detalle: 'Cuando registres ventas aparecerán aquí',
-          ),
-
-        const SizedBox(height: 24),
-
-        // Stock bajo
-        if (resumen.stockBajo.isNotEmpty) ...[
-          _SeccionHeader(
-            titulo: 'Alertas de stock',
-            icon: Icons.warning_amber_rounded,
-            color: Colors.orange.shade700,
-          ),
-          const SizedBox(height: 8),
-          ...resumen.stockBajo.map((sb) => Card(
-                color: Colors.orange.shade50,
-                margin: const EdgeInsets.only(bottom: 6),
-                child: ListTile(
-                  leading: Icon(Icons.inventory_2,
-                      color: Colors.orange.shade700),
-                  title: Text(sb.nombre),
-                  subtitle: Text(
-                      'Stock: ${sb.stockActual} / Mínimo: ${sb.stockMin}'),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 14),
-                  onTap: () => context.go('/inventario'),
-                ),
-              )),
-        ],
-
-        const SizedBox(height: 24),
-
-        // Ventas últimos 7 días (gráfico simple de barras)
-        if (resumen.ventasUltimos7Dias.isNotEmpty) ...[
-          _SeccionHeader(
-            titulo: 'Ventas últimos 7 días',
-            icon: Icons.bar_chart,
-          ),
-          const SizedBox(height: 8),
-          _VentasChart(dias: resumen.ventasUltimos7Dias, formatter: formatter),
-        ],
-      ],
-    );
-  }
-
-  String _saludo() {
-    final hora = DateTime.now().hour;
-    if (hora < 12) return 'Buenos días';
-    if (hora < 19) return 'Buenas tardes';
-    return 'Buenas noches';
-  }
-}
-
-class _MetricaCard extends StatelessWidget {
-  final String titulo;
-  final String valor;
-  final IconData icon;
-  final Color color;
-  final String subtitulo;
-
-  const _MetricaCard({
-    required this.titulo,
-    required this.valor,
-    required this.icon,
-    required this.color,
-    required this.subtitulo,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  titulo,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          Text(
-            valor,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-          Text(
-            subtitulo,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
       ),
     );
   }
-}
 
-class _SeccionHeader extends StatelessWidget {
-  final String titulo;
-  final IconData icon;
-  final Color? color;
-
-  const _SeccionHeader({
-    required this.titulo,
-    required this.icon,
-    this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final c = color ?? theme.colorScheme.primary;
-    return Row(
+  Widget _buildHeader(
+    BuildContext context,
+    WidgetRef ref,
+    ThemeData theme,
+    DashboardResumen resumen,
+  ) {
+    final row = Row(
       children: [
-        Icon(icon, color: c, size: 20),
-        const SizedBox(width: 8),
+        Icon(Icons.dashboard, color: theme.colorScheme.primary, size: 24),
+        const SizedBox(width: DashboardSpacing.sm),
         Text(
-          titulo,
-          style: theme.textTheme.titleMedium?.copyWith(
+          'DASHBOARD',
+          style: theme.textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
           ),
+        ),
+        const Spacer(),
+        IconButton(
+          onPressed: () => context.push('/chat'),
+          icon: const Icon(Icons.chat_bubble_outline),
+          tooltip: 'Asistente ejecutivo',
+        ),
+        IconButton(
+          onPressed: () => ref.invalidate(dashboardProvider),
+          icon: const Icon(Icons.refresh),
+          tooltip: 'Actualizar',
+        ),
+      ],
+    );
+    return Animate(
+      effects: const [
+        FadeEffect(duration: Duration(milliseconds: 200)),
+        SlideEffect(begin: Offset(0, -0.05)),
+      ],
+      child: row,
+    );
+  }
+
+  Widget _buildMetricasRow(
+    BuildContext context,
+    DashboardResumen resumen,
+    NumberFormat formatter,
+    DashboardLayoutVariant variant,
+  ) {
+    final heroRaw = MetricaPrincipalCard(
+      titulo: 'Ventas hoy',
+      valor: formatter.format(resumen.ventasHoy),
+      subtitulo: '${resumen.transaccionesHoy} transacciones',
+      meta: 'Ticket promedio: ${formatter.format(resumen.ticketPromedio)}',
+      icon: Icons.payments,
+      colorPrimario: Theme.of(context).colorScheme.primary,
+      trailing: VariacionBadge(variacionPct: resumen.variacionPct),
+    );
+    final hero = Animate(
+      effects: const [
+        FadeEffect(duration: Duration(milliseconds: 300)),
+        SlideEffect(begin: Offset(0, 0.1)),
+      ],
+      child: heroRaw,
+    );
+
+    final secundariasRaw = [
+      MetricaSecundariaCard(
+        titulo: 'Efectivo',
+        valor: formatter.format(resumen.ventasEfectivo),
+        subtitulo: 'recaudado',
+        icon: Icons.money,
+        colorIcono: Colors.green.shade700,
+      ),
+      MetricaSecundariaCard(
+        titulo: 'Tarjeta',
+        valor: formatter.format(resumen.ventasTarjeta),
+        subtitulo: 'recaudado',
+        icon: Icons.credit_card,
+        colorIcono: Colors.purple.shade700,
+      ),
+      MetricaSecundariaCard(
+        titulo: 'Ticket prom.',
+        valor: formatter.format(resumen.ticketPromedio),
+        subtitulo: 'por venta',
+        icon: Icons.receipt_long,
+        colorIcono: Colors.blue.shade700,
+      ),
+    ];
+    final secundarias = [
+      for (var i = 0; i < secundariasRaw.length; i++)
+        Animate(
+          effects: [
+            const FadeEffect(duration: Duration(milliseconds: 300)),
+            const SlideEffect(begin: Offset(0, 0.1)),
+          ],
+          delay: Duration(milliseconds: 80 * (i + 1)),
+          child: secundariasRaw[i],
+        ),
+    ];
+
+    if (variant == DashboardLayoutVariant.desktop) {
+      return Column(
+        children: [
+          hero,
+          const SizedBox(height: DashboardSpacing.md),
+          Row(
+            children: [
+              for (var i = 0; i < secundarias.length; i++) ...[
+                Expanded(child: secundarias[i]),
+                if (i < secundarias.length - 1)
+                  const SizedBox(width: DashboardSpacing.md),
+              ],
+            ],
+          ),
+        ],
+      );
+    }
+    return Column(
+      children: [
+        hero,
+        const SizedBox(height: DashboardSpacing.md),
+        for (var i = 0; i < secundarias.length; i++) ...[
+          secundarias[i],
+          if (i < secundarias.length - 1)
+            const SizedBox(height: DashboardSpacing.sm),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildTopYChartRow(
+    BuildContext context,
+    WidgetRef ref,
+    DashboardResumen resumen,
+  ) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 6,
+          child: _buildChart(context, resumen),
+        ),
+        const SizedBox(width: DashboardSpacing.md),
+        Expanded(
+          flex: 4,
+          child: _buildTopProductos(context, ref, resumen),
         ),
       ],
     );
   }
-}
 
-class _EmptyHint extends StatelessWidget {
-  final IconData icon;
-  final String mensaje;
-  final String detalle;
-
-  const _EmptyHint({
-    required this.icon,
-    required this.mensaje,
-    required this.detalle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, size: 48, color: theme.colorScheme.outline),
-          const SizedBox(height: 8),
-          Text(mensaje, style: theme.textTheme.titleSmall),
-          const SizedBox(height: 4),
-          Text(
-            detalle,
-            style: theme.textTheme.bodySmall,
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
+  Widget _buildTopProductos(
+    BuildContext context,
+    WidgetRef ref,
+    DashboardResumen resumen,
+  ) {
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SeccionHeader(
+          titulo: 'Top productos hoy',
+          icon: Icons.star,
+          badgeCount: 5,
+        ),
+        TopProductosList(productos: resumen.topProductos),
+      ],
+    );
+    return Animate(
+      effects: const [
+        FadeEffect(duration: Duration(milliseconds: 300)),
+        SlideEffect(begin: Offset(0, 0.05)),
+      ],
+      delay: const Duration(milliseconds: 200),
+      child: content,
     );
   }
-}
 
-class _VentasChart extends StatelessWidget {
-  final List<VentasDia> dias;
-  final NumberFormat formatter;
+  Widget _buildStockAlertas(BuildContext context, DashboardResumen resumen) {
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SeccionHeader(
+          titulo: 'Alertas de stock',
+          icon: Icons.warning_amber_rounded,
+          color: DashboardColors.advertenciaFg,
+          badgeCount: resumen.stockBajo.length,
+        ),
+        StockAlertList(
+          items: resumen.stockBajo,
+          onVerTodas: () => context.go('/inventario'),
+        ),
+      ],
+    );
+    return Animate(
+      effects: const [
+        FadeEffect(duration: Duration(milliseconds: 300)),
+        SlideEffect(begin: Offset(0, 0.05)),
+      ],
+      delay: const Duration(milliseconds: 280),
+      child: content,
+    );
+  }
 
-  const _VentasChart({required this.dias, required this.formatter});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final maxVenta = dias.fold<double>(0, (m, d) => d.totalVentas > m ? d.totalVentas : m);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Column(
-        children: [
-          SizedBox(
-            height: 120,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: dias.map((d) {
-                final heightFactor = maxVenta == 0 ? 0.0 : d.totalVentas / maxVenta;
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Text(
-                          formatter.format(d.totalVentas),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          height: 90 * heightFactor + 4,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                theme.colorScheme.primary,
-                                theme.colorScheme.primary.withValues(alpha: 0.4),
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
+  Widget _buildChart(BuildContext context, DashboardResumen resumen) {
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SeccionHeader(
+          titulo: 'Ventas últimos 7 días',
+          icon: Icons.bar_chart,
+        ),
+        if (resumen.ventasUltimos7Dias.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(DashboardSpacing.xl),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(DashboardRadius.md),
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: dias.map((d) {
-              return Expanded(
-                child: Text(
-                  _shortDay(d.fecha),
-                  style: theme.textTheme.bodySmall,
-                  textAlign: TextAlign.center,
-                ),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
+            child: Center(
+              child: Text(
+                'Sin datos de los últimos 7 días',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+          )
+        else
+          VentasChart(dias: resumen.ventasUltimos7Dias),
+      ],
     );
-  }
-
-  String _shortDay(String iso) {
-    try {
-      final dt = DateTime.parse(iso);
-      const dias = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
-      return dias[dt.weekday - 1];
-    } catch (_) {
-      return iso;
-    }
+    return Animate(
+      effects: const [
+        FadeEffect(duration: Duration(milliseconds: 300)),
+        SlideEffect(begin: Offset(0, 0.05)),
+      ],
+      delay: const Duration(milliseconds: 360),
+      child: content,
+    );
   }
 }
