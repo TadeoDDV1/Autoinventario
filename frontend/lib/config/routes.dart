@@ -26,7 +26,7 @@ final _shellNavigatorKey = GlobalKey<NavigatorState>();
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
-    initialLocation: '/dashboard',
+    initialLocation: '/caja',
     routes: [
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
@@ -127,19 +127,19 @@ class AppShell extends ConsumerStatefulWidget {
 class _AppShellState extends ConsumerState<AppShell> {
   int _getSelectedIndex(BuildContext context) {
     final location = GoRouterState.of(context).uri.toString();
+    if (location.startsWith('/dashboard')) return 1;
     if (location.startsWith('/inventario')) return 2;
-    if (location.startsWith('/caja')) return 1;
     return 0;
   }
 
   void _onDestinationSelected(int index) {
     switch (index) {
       case 0:
-        context.go('/dashboard');
+        context.go('/caja');
         ref.read(modoAppProvider.notifier).setModo(ModoApp.caja);
         break;
       case 1:
-        context.go('/caja');
+        context.go('/dashboard');
         ref.read(modoAppProvider.notifier).setModo(ModoApp.caja);
         break;
       case 2:
@@ -158,14 +158,14 @@ class _AppShellState extends ConsumerState<AppShell> {
     final stockAlertCount = ref.watch(stockAlertCountProvider);
     final destinations = [
       NavigationDestination(
-        icon: const Icon(Icons.dashboard_outlined),
-        selectedIcon: const Icon(Icons.dashboard),
-        label: 'Inicio',
-      ),
-      NavigationDestination(
         icon: const Icon(Icons.point_of_sale_outlined),
         selectedIcon: const Icon(Icons.point_of_sale),
         label: 'Caja',
+      ),
+      NavigationDestination(
+        icon: const Icon(Icons.dashboard_outlined),
+        selectedIcon: const Icon(Icons.dashboard),
+        label: 'Inicio',
       ),
       NavigationDestination(
         icon: Badge(
