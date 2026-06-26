@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../core/format/money.dart';
 import '../../models/sugerencia.dart';
 import '../../providers/ia_provider.dart';
+import '../../widgets/dashboard/dashboard_shimmer.dart';
 
 /// Dashboard ejecutivo de inicio. Muestra resumen del día, top productos
 /// y alertas de stock. Reemplaza la vista vacía anterior con información útil.
@@ -21,7 +22,7 @@ class DashboardScreen extends ConsumerWidget {
       onRefresh: () async => ref.invalidate(dashboardProvider),
       child: resumenAsync.when(
         data: (resumen) => _buildContent(context, ref, theme, resumen),
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const DashboardShimmer(),
         error: (e, _) => Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
