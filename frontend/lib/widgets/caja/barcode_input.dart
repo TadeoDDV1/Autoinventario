@@ -19,6 +19,19 @@ import 'barcode_scanner_button.dart';
 class BarcodeInput extends ConsumerStatefulWidget {
   final Function(Producto producto) onProductoEncontrado;
   final Function(String mensaje) onError;
+  /// Callback que se invoca cuando el usuario escanea/escribe un código
+  /// que NO existe en el backend (Bloque B — alta inline desde Caja).
+  ///
+  /// Antes esto disparaba `onError('Producto no encontrado: ...')`. Ahora
+  /// se separa para que `CajaScreen` pueda abrir el alta rápida sin un
+  /// SnackBar de error (UX del flujo "escaneaste algo nuevo → registralo").
+  ///
+  /// Es REQUIRED para forzar a todos los callers a manejar el caso (no
+  /// mostrarlo, abrir el form, lo que toque). En otros flujos (p.ej.
+  /// `escanear_producto_screen.dart`) que ya tienen su propio manejo de
+  /// producto inexistente, se puede pasar un noop `_ => {}`.
+  final Function(String codigo) onProductoNoRegistrado;
+
   /// FocusNode externo opcional para que atajos de teclado (F1)
   /// puedan enfocar este input desde fuera.
   final FocusNode? externalFocusNode;
@@ -27,6 +40,7 @@ class BarcodeInput extends ConsumerStatefulWidget {
     super.key,
     required this.onProductoEncontrado,
     required this.onError,
+    required this.onProductoNoRegistrado,
     this.externalFocusNode,
   });
 
@@ -131,12 +145,18 @@ class _BarcodeInputState extends ConsumerState<BarcodeInput> {
 
     try {
       final api = ref.read(apiServiceProvider);
-      final producto = await api.buscarPorCodigo(codigo.trim());
+      // Bloque B — Task B1: pasamos de /buscar (404 → null) a /escanear
+      // (200 con {existe, producto?, codigo}). El backend ya distingue
+      // "no registrado" de "error de red" — el widget honra esa distinción.
+      final result = await api.escanearProducto(codigo.trim());
 
-      if (producto != null) {
-        _onProductoEncontradoConFeedback(producto);
+      if (result.existe && result.producto != null) {
+        _onProductoEncontradoConFeedback(result.producto!);
       } else {
-        widget.onError('Producto no encontrado: $codigo');
+        // No existe en backend: NO snack de error (sería molesto en Caja,
+        // donde escanear códigos nuevos es el flujo esperado). Delegamos
+        // al caller — CajaScreen abrirá el alta rápida.
+        widget.onProductoNoRegistrado(codigo.trim());
         setState(() => _isLoading = false);
       }
     } on ApiException catch (e) {

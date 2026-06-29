@@ -76,6 +76,17 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
     _showSnackBar(mensaje, Colors.orange);
   }
 
+  /// Bloque B — Task B1: el usuario escaneó/escribió un código que NO
+  /// existe en el backend. Antes esto mostraba un SnackBar de error;
+  /// ahora abrimos el alta rápida para que el operador pueda registrar
+  /// el producto en el momento (sin perder el flujo de la venta).
+  ///
+  /// B2 refinará esto: mostrará un `AltaRapidaSheet` en lugar de navegar,
+  /// y pre-cargará el `codigoBarras` desde la query string.
+  void _onProductoNoRegistrado(String codigo) {
+    context.go('/inventario/nuevo-rapido?codigo=$codigo');
+  }
+
   void _showSnackBar(String mensaje, Color color) {
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -324,6 +335,7 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
           child: BarcodeInput(
             onProductoEncontrado: _onProductoScan,
             onError: _onScanError,
+            onProductoNoRegistrado: _onProductoNoRegistrado,
             externalFocusNode: _inputFocus,
           ),
         ),
