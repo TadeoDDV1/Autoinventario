@@ -82,6 +82,13 @@ final routerProvider = Provider<GoRouter>((ref) {
                 builder: (context, state) => const ProductoFormScreen(),
               ),
               GoRoute(
+                path: 'nuevo-rapido',
+                parentNavigatorKey: _rootNavigatorKey,
+                builder: (context, state) => const ProductoFormScreen(
+                  mode: ProductoFormMode.rapido,
+                ),
+              ),
+              GoRoute(
                 path: 'escanear',
                 parentNavigatorKey: _rootNavigatorKey,
                 builder: (context, state) => const EscanearProductoScreen(),

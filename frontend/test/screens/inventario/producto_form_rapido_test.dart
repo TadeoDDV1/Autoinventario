@@ -18,6 +18,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:ferreteria_app/models/categoria.dart';
 import 'package:ferreteria_app/models/producto.dart';
 import 'package:ferreteria_app/providers/producto_provider.dart';
@@ -298,6 +299,58 @@ void main() {
         // El botón debe ser el de editar (no el de "crear y agregar")
         expect(find.text('Actualizar Producto'), findsOneWidget);
         expect(find.text('Crear y agregar al carrito'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      '(6) form full (crear) muestra IconButton flash_on → navega a /inventario/nuevo-rapido',
+      (tester) async {
+        final api = _FakeApiService();
+        final router = GoRouter(
+          initialLocation: '/inventario/nuevo',
+          routes: [
+            GoRoute(
+              path: '/inventario/nuevo',
+              builder: (context, state) => const ProductoFormScreen(),
+            ),
+            GoRoute(
+              path: '/inventario/nuevo-rapido',
+              builder: (context, state) => const Scaffold(
+                body: Text('RAPIDO_DESTINO'),
+              ),
+            ),
+          ],
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              apiServiceProvider.overrideWithValue(api),
+              categoriasProvider.overrideWith(
+                () => _FakeCategoriasNotifier(const <Categoria>[]),
+              ),
+            ],
+            child: MaterialApp.router(routerConfig: router),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // El form debe estar en pantalla (default full, sin productoId)
+        expect(find.text('Nuevo Producto'), findsOneWidget);
+        expect(find.widgetWithText(TextFormField, 'Descripción'),
+            findsOneWidget);
+
+        // El IconButton de "Cambiar a modo rápido" debe estar presente
+        final flashBtn = find.widgetWithIcon(IconButton, Icons.flash_on);
+        expect(flashBtn, findsOneWidget);
+
+        // Tap → debe navegar a /inventario/nuevo-rapido
+        await tester.tap(flashBtn);
+        await tester.pumpAndSettle();
+
+        expect(find.text('RAPIDO_DESTINO'), findsOneWidget);
+        expect(router.routerDelegate.currentConfiguration.uri.path,
+            '/inventario/nuevo-rapido');
       },
     );
   });

@@ -214,6 +214,16 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/inventario'),
         ),
+        actions: [
+          // Switch "modo rápido" sólo visible al CREAR en modo full.
+          // En edición no aplica (modo rápido se ignora al editar).
+          if (widget.mode == ProductoFormMode.full && !_isEditing)
+            IconButton(
+              icon: const Icon(Icons.flash_on),
+              tooltip: 'Cambiar a modo rápido',
+              onPressed: () => context.go('/inventario/nuevo-rapido'),
+            ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
