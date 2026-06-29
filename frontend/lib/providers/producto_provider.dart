@@ -99,3 +99,32 @@ class CategoriasNotifier extends AsyncNotifier<List<Categoria>> {
     return api.getCategorias();
   }
 }
+
+/// Construye el payload `Map<String, dynamic>` para crear un producto en modo
+/// rápido.
+///
+/// Usado por:
+/// - `ProductoFormScreen` con `ProductoFormMode.rapido` (alta inline desde Caja).
+/// - `AltaRapidaSheet` (B2, alta desde la grilla de inventario).
+///
+/// Defaults del modo rápido:
+/// - `stock_actual = 1` (la unidad que el operador está por vender).
+/// - `stock_minimo = 1` (umbral de reorden, igual al stock actual).
+/// - `precio_compra = 0` (desconocido al alta rápida; se completa luego).
+///
+/// El `codigo_barras` se normaliza con `.trim()` para evitar que valores como
+/// `' 1234 '` lleguen al backend con espacios y rompan el índice único.
+Map<String, dynamic> buildRapidoCreatePayload({
+  required String nombre,
+  required String codigoBarras,
+  required double precioVenta,
+}) {
+  return {
+    'nombre': nombre,
+    'codigo_barras': codigoBarras.trim(),
+    'precio_venta': precioVenta,
+    'precio_compra': 0,
+    'stock_actual': 1,
+    'stock_minimo': 1,
+  };
+}
