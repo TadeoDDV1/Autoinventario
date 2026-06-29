@@ -5,8 +5,10 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/durations.dart';
 import '../../core/format/money.dart';
 import '../../core/layout/breakpoints.dart';
+import '../../models/producto.dart';
 import '../../providers/producto_provider.dart';
 import '../../providers/venta_provider.dart';
+import '../../widgets/caja/alta_rapida_sheet.dart';
 import '../../widgets/caja/barcode_input.dart';
 import '../../widgets/caja/quick_cart_summary.dart';
 import '../../widgets/ia/copilot_panel.dart';
@@ -37,6 +39,10 @@ class _NuevoProductoIntent extends Intent {
 
 class _OpenPagoIntent extends Intent {
   const _OpenPagoIntent();
+}
+
+class _AltaRapidaIntent extends Intent {
+  const _AltaRapidaIntent();
 }
 
 class CajaScreen extends ConsumerStatefulWidget {
@@ -76,15 +82,30 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
     _showSnackBar(mensaje, Colors.orange);
   }
 
-  /// Bloque B — Task B1: el usuario escaneó/escribió un código que NO
-  /// existe en el backend. Antes esto mostraba un SnackBar de error;
-  /// ahora abrimos el alta rápida para que el operador pueda registrar
-  /// el producto en el momento (sin perder el flujo de la venta).
+  /// Bloque B — Task B1/B2: el usuario escaneó/escribió un código que NO
+  /// existe en el backend. Antes esto navegaba a `/inventario/nuevo-rapido`;
+  /// ahora abrimos el `AltaRapidaSheet` como bottom sheet para que el
+  /// operador pueda registrar el producto sin perder el flujo de la venta.
+  Future<void> _onProductoNoRegistrado(String codigo) async {
+    await _abrirAltaRapida(codigo: codigo);
+  }
+
+  /// Abre el sheet de alta rápida con un código inicial opcional.
   ///
-  /// B2 refinará esto: mostrará un `AltaRapidaSheet` en lugar de navegar,
-  /// y pre-cargará el `codigoBarras` desde la query string.
-  void _onProductoNoRegistrado(String codigo) {
-    context.go('/inventario/nuevo-rapido?codigo=$codigo');
+  /// Usado por:
+  /// - `_onProductoNoRegistrado(codigo)` cuando el barcode no encuentra
+  ///   el producto (B1).
+  /// - El atajo `Ctrl+M` para crear un producto nuevo sin escaneo previo.
+  Future<void> _abrirAltaRapida({String? codigo}) async {
+    final nuevo = await showModalBottomSheet<Producto?>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => AltaRapidaSheet(codigoInicial: codigo),
+    );
+    if (nuevo != null && mounted) {
+      ref.read(carritoProvider.notifier).agregarProducto(nuevo);
+      _showSnackBar('${nuevo.nombre} creado y agregado ✓', Colors.green);
+    }
   }
 
   void _showSnackBar(String mensaje, Color color) {
@@ -134,6 +155,9 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
             _NuevoProductoIntent(),
         const SingleActivator(LogicalKeyboardKey.keyP, control: true):
             _OpenPagoIntent(),
+        // Bloque B — Task B2: alta rápida inline (3 campos) sin escanear.
+        const SingleActivator(LogicalKeyboardKey.keyM, control: true):
+            _AltaRapidaIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
@@ -180,6 +204,12 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
           _OpenPagoIntent: CallbackAction<_OpenPagoIntent>(
             onInvoke: (_) {
               _abrirCobroRapido();
+              return null;
+            },
+          ),
+          _AltaRapidaIntent: CallbackAction<_AltaRapidaIntent>(
+            onInvoke: (_) {
+              _abrirAltaRapida();
               return null;
             },
           ),

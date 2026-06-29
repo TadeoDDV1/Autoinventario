@@ -64,10 +64,23 @@ class ProductosNotifier extends AsyncNotifier<PaginatedResponse<Producto>> {
     );
   }
 
-  Future<void> createProducto(Map<String, dynamic> data) async {
+  /// Crea un producto vía POST /productos y devuelve el `Producto`
+  /// completo (refetch vía GET /productos/:id para tener `categoriaNombre`
+  /// y demás campos que el POST no incluye en la respuesta).
+  ///
+  /// Devuelve `Future<Producto>` (no `void`) para que callers como
+  /// `AltaRapidaSheet` (B2) puedan hacer `Navigator.pop(context, producto)`
+  /// con la entidad completa sin un round-trip extra al backend.
+  ///
+  /// El refetch es responsabilidad de este método — fuera de aquí nadie
+  /// debería llamar a `api.createProducto` + `api.getProductoById` por
+  /// separado.
+  Future<Producto> createProducto(Map<String, dynamic> data) async {
     final api = ref.read(apiServiceProvider);
-    await api.createProducto(data);
+    final id = await api.createProducto(data);
+    final creado = await api.getProductoById(id);
     ref.invalidateSelf();
+    return creado;
   }
 
   Future<void> updateProducto(int id, Map<String, dynamic> data) async {
