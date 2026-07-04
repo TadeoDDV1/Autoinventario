@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -58,6 +60,12 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
   final GlobalKey<QuickCartSummaryState> _cartKey =
       GlobalKey<QuickCartSummaryState>();
 
+  /// Bloque B — Task B3: código del último scan que NO se encontró. Mientras
+  /// esté seteado, mostramos un banner arriba del BarcodeInput con CTA
+  /// "Alta rápida" para que el operador pueda reintentar sin re-escanear.
+  String? _ultimoCodigoNoRegistrado;
+  Timer? _bannerTimer;
+
   @override
   void initState() {
     super.initState();
@@ -70,10 +78,32 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
   void dispose() {
     _shortcutFocus.dispose();
     _inputFocus.dispose();
+    _bannerTimer?.cancel();
     super.dispose();
   }
 
+  /// Bloque B — Task B3: setea el banner y arma un timer de auto-clear a 30s.
+  void _setUltimoCodigoNoRegistrado(String codigo) {
+    _bannerTimer?.cancel();
+    setState(() => _ultimoCodigoNoRegistrado = codigo);
+    _bannerTimer = Timer(const Duration(seconds: 30), () {
+      if (mounted) {
+        setState(() => _ultimoCodigoNoRegistrado = null);
+      }
+    });
+  }
+
+  /// Bloque B — Task B3: descarta el banner manualmente.
+  void _limpiarUltimoCodigoNoRegistrado() {
+    _bannerTimer?.cancel();
+    if (_ultimoCodigoNoRegistrado != null) {
+      setState(() => _ultimoCodigoNoRegistrado = null);
+    }
+  }
+
   void _onProductoScan(dynamic producto) {
+    // B3: un scan exitoso limpia el banner de "no registrado".
+    _limpiarUltimoCodigoNoRegistrado();
     ref.read(carritoProvider.notifier).agregarProducto(producto);
     _showSnackBar('${producto.nombre} agregado ✓', Colors.green);
   }
@@ -82,12 +112,18 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
     _showSnackBar(mensaje, Colors.orange);
   }
 
-  /// Bloque B — Task B1/B2: el usuario escaneó/escribió un código que NO
-  /// existe en el backend. Antes esto navegaba a `/inventario/nuevo-rapido`;
-  /// ahora abrimos el `AltaRapidaSheet` como bottom sheet para que el
-  /// operador pueda registrar el producto sin perder el flujo de la venta.
+  /// Bloque B — Task B1/B2/B3: el usuario escaneó/escribió un código que NO
+  /// existe en el backend. Abre el `AltaRapidaSheet` como bottom sheet Y
+  /// muestra un banner persistente por si el operador quiere reintentar
+  /// el alta más tarde sin re-escanear.
   Future<void> _onProductoNoRegistrado(String codigo) async {
-    await _abrirAltaRapida(codigo: codigo);
+    _setUltimoCodigoNoRegistrado(codigo);
+    final nuevo = await _abrirAltaRapida(codigo: codigo);
+    if (nuevo != null && mounted) {
+      // Alta exitosa → limpia el banner.
+      _limpiarUltimoCodigoNoRegistrado();
+    }
+    // Si canceló, el banner persiste (Timer de 30s lo limpia solo).
   }
 
   /// Abre el sheet de alta rápida con un código inicial opcional.
@@ -96,7 +132,10 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
   /// - `_onProductoNoRegistrado(codigo)` cuando el barcode no encuentra
   ///   el producto (B1).
   /// - El atajo `Ctrl+M` para crear un producto nuevo sin escaneo previo.
-  Future<void> _abrirAltaRapida({String? codigo}) async {
+  ///
+  /// Devuelve el `Producto` creado si el alta fue exitosa, o `null` si el
+  /// operador canceló el sheet (B3 usa esto para limpiar el banner).
+  Future<Producto?> _abrirAltaRapida({String? codigo}) async {
     final nuevo = await showModalBottomSheet<Producto?>(
       context: context,
       isScrollControlled: true,
@@ -106,6 +145,7 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
       ref.read(carritoProvider.notifier).agregarProducto(nuevo);
       _showSnackBar('${nuevo.nombre} creado y agregado ✓', Colors.green);
     }
+    return nuevo;
   }
 
   void _showSnackBar(String mensaje, Color color) {
@@ -362,11 +402,60 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
               ),
             ],
           ),
-          child: BarcodeInput(
-            onProductoEncontrado: _onProductoScan,
-            onError: _onScanError,
-            onProductoNoRegistrado: _onProductoNoRegistrado,
-            externalFocusNode: _inputFocus,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Bloque B — Task B3: banner persistente tras scan fallido.
+              if (_ultimoCodigoNoRegistrado != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8, left: 12, right: 12),
+                  child: Material(
+                    color: theme.colorScheme.errorContainer,
+                    borderRadius: BorderRadius.circular(12),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => _abrirAltaRapida(codigo: _ultimoCodigoNoRegistrado),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.warning_amber_rounded,
+                              color: theme.colorScheme.onErrorContainer,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Último código "${_ultimoCodigoNoRegistrado}" no registrado. ¿Agregarlo ahora?',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: theme.colorScheme.onErrorContainer,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            FilledButton.tonal(
+                              onPressed: () => _abrirAltaRapida(codigo: _ultimoCodigoNoRegistrado),
+                              child: const Text('Alta rápida'),
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: const Icon(Icons.close, size: 18),
+                              tooltip: 'Descartar',
+                              onPressed: _limpiarUltimoCodigoNoRegistrado,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              BarcodeInput(
+                onProductoEncontrado: _onProductoScan,
+                onError: _onScanError,
+                onProductoNoRegistrado: _onProductoNoRegistrado,
+                externalFocusNode: _inputFocus,
+              ),
+            ],
           ),
         ),
 

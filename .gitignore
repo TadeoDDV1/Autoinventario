@@ -35,3 +35,6 @@ Thumbs.db
 android/.gradle/
 android/app/build/
 android/build/
+
+# Hermes plans/scratch (no commit)
+.hermes/
