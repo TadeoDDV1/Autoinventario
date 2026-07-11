@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/producto.dart';
 import '../models/venta.dart';
+import 'caja_sesion_service_provider.dart';
 import 'producto_provider.dart';
 
 const String _carritoKey = 'carrito_items';
@@ -83,7 +85,6 @@ class CarritoNotifier extends Notifier<List<CarritoItem>> {
       final json = state.map((item) => item.toJson()).toList();
       await prefs.setString(_carritoKey, jsonEncode(json));
     } catch (_) {
-      // Ignore storage errors
     }
   }
 
@@ -100,11 +101,27 @@ class CarritoNotifier extends Notifier<List<CarritoItem>> {
       state = [...state, CarritoItem(producto: producto, cantidad: 1)];
     }
     _saveToStorage();
+    _syncAdd(producto.id);
+  }
+
+  void _syncAdd(int productoId) {
+    try {
+      ref.read(cajaSesionServiceProvider).agregarItem(productoId);
+    } catch (_) {
+    }
   }
 
   void quitarProducto(int productoId) {
     state = state.where((item) => item.producto.id != productoId).toList();
     _saveToStorage();
+    _syncRemove(productoId);
+  }
+
+  void _syncRemove(int productoId) {
+    try {
+      ref.read(cajaSesionServiceProvider).removerItem(productoId);
+    } catch (_) {
+    }
   }
 
   void actualizarCantidad(int productoId, int cantidad) {
@@ -121,6 +138,14 @@ class CarritoNotifier extends Notifier<List<CarritoItem>> {
       ];
     }
     _saveToStorage();
+    _syncSet(productoId, cantidad);
+  }
+
+  void _syncSet(int productoId, int cantidad) {
+    try {
+      ref.read(cajaSesionServiceProvider).setCantidad(productoId, cantidad);
+    } catch (_) {
+    }
   }
 
   void incrementarCantidad(int productoId) {
@@ -134,6 +159,7 @@ class CarritoNotifier extends Notifier<List<CarritoItem>> {
       ];
     }
     _saveToStorage();
+    _syncAdd(productoId);
   }
 
   void decrementarCantidad(int productoId) {
@@ -151,11 +177,23 @@ class CarritoNotifier extends Notifier<List<CarritoItem>> {
       }
     }
     _saveToStorage();
+    _syncAfterDecrement(productoId);
+  }
+
+  void _syncAfterDecrement(int productoId) {
+    final idx = state.indexWhere((i) => i.producto.id == productoId);
+    if (idx >= 0) {
+      _syncSet(productoId, state[idx].cantidad);
+    }
   }
 
   void vaciar() {
     state = [];
     _saveToStorage();
+    try {
+      ref.read(cajaSesionServiceProvider).limpiar();
+    } catch (_) {
+    }
   }
 
   /// Reordena un item dentro del carrito. Sigue la convención de
@@ -204,3 +242,24 @@ final ventasProvider = FutureProvider<List<Venta>>((ref) async {
   final api = ref.read(apiServiceProvider);
   return api.getVentas();
 });
+
+/// Extensión para setear cantidad sin pasar por el server.
+/// Usado durante reconciliación inicial.
+extension CarritoDirectSetter on CarritoNotifier {
+  int get cantidadTotal => state.length;
+
+  void setCantidadDirecta(Producto producto, int cantidad) {
+    final idx = state.indexWhere((i) => i.producto.id == producto.id);
+    if (idx >= 0) {
+      state = [
+        for (var i = 0; i < state.length; i++)
+          if (i == idx) state[i].copyWith(cantidad: cantidad) else state[i],
+      ];
+    } else {
+      agregarProducto(producto);
+      if (cantidad > 1) {
+        actualizarCantidad(producto.id, cantidad);
+      }
+    }
+  }
+}

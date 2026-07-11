@@ -15,7 +15,7 @@
 // la descripción de esa clave.
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ferreteria_app/widgets/inventario/uso_tooltip.dart';
+import 'package:ferreteria_app/widgets/inventario/conocimiento_ferreteria.dart';
 
 void main() {
   group('ConocimientoFerreteria.buscarDescripcion', () {

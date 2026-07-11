@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/layout/breakpoints.dart';
+import '../core/theme/glass_tokens.dart';
+import '../core/widgets/atmospheric_background.dart';
+import '../core/widgets/glass_container.dart';
 import '../domain/enums.dart';
 import '../models/venta.dart';
 import '../providers/theme_provider.dart';
@@ -198,73 +201,97 @@ class _AppShellState extends ConsumerState<AppShell> {
         .toList();
 
     return Scaffold(
-      body: Row(
+      body: Stack(
         children: [
-          if (isWide)
-            NavigationRail(
-              selectedIndex: selectedIndex,
-              onDestinationSelected: _onDestinationSelected,
-              labelType: NavigationRailLabelType.all,
-              leading: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Icon(
-                  Icons.hardware,
-                  size: 32,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-              trailing: Expanded(
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: IconButton(
-                      onPressed: () =>
-                          ref.read(themeProvider.notifier).toggle(context),
-                      icon: Icon(_themeIcon(theme)),
-                      tooltip: _themeTooltip(theme),
+          const AtmosphericBackground(),
+          Row(
+            children: [
+              if (isWide)
+                GlassContainer(
+                  width: 80,
+                  height: double.infinity,
+                  borderRadius: 0,
+                  blur: GlassTokens.blurSmall,
+                  child: NavigationRail(
+                    selectedIndex: selectedIndex,
+                    onDestinationSelected: _onDestinationSelected,
+                    labelType: NavigationRailLabelType.all,
+                    backgroundColor: Colors.transparent,
+                    leading: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Icon(
+                        Icons.hardware,
+                        size: 32,
+                        color: theme.colorScheme.primary,
+                      ),
                     ),
+                    trailing: Expanded(
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: IconButton(
+                            onPressed: () =>
+                                ref.read(themeProvider.notifier).toggle(context),
+                            icon: Icon(_themeIcon(theme)),
+                            tooltip: _themeTooltip(theme),
+                          ),
+                        ),
+                      ),
+                    ),
+                    destinations: railDestinations,
                   ),
+                ),
+              if (isWide)
+                const VerticalDivider(thickness: 1, width: 1),
+              Expanded(
+                child: Column(
+                  children: [
+                    if (!isWide && stockAlertCount > 0)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: StockAlertBanner(),
+                      ),
+                    if (!isWide)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        child: ConectividadBadge(),
+                      ),
+                    Expanded(
+                      child: widget.child,
+                    ),
+                  ],
                 ),
               ),
-              destinations: railDestinations,
-            ),
-          if (isWide)
-            const VerticalDivider(thickness: 1, width: 1),
-          Expanded(
-            child: Column(
-              children: [
-                // Banner superior: alertas de stock (móvil) + estado de conexión
-                if (!isWide && stockAlertCount > 0)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: StockAlertBanner(),
-                  ),
-                if (!isWide)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: ConectividadBadge(),
-                  ),
-                Expanded(
-                  child: widget.child,
-                ),
-              ],
-            ),
+            ],
           ),
         ],
       ),
       bottomNavigationBar: isWide
           ? null
-          : Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (stockAlertCount == 0) const ConectividadBadge(),
-                NavigationBar(
-                  selectedIndex: selectedIndex,
-                  onDestinationSelected: _onDestinationSelected,
-                  destinations: destinations,
+          : GlassContainer(
+              borderRadius: GlassTokens.borderRadiusLarge,
+              blur: GlassTokens.blurMedium,
+              borderColor: Colors.transparent,
+              customDecoration: BoxDecoration(
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(GlassTokens.borderRadiusLarge),
+                  topRight: Radius.circular(GlassTokens.borderRadiusLarge),
                 ),
-              ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (stockAlertCount == 0) const ConectividadBadge(),
+                  NavigationBar(
+                    selectedIndex: selectedIndex,
+                    onDestinationSelected: _onDestinationSelected,
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    destinations: destinations,
+                  ),
+                ],
+              ),
             ),
     );
   }

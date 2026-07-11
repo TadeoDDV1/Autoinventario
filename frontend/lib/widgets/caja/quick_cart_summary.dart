@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/durations.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/format/money.dart';
+import '../../core/theme/glass_tokens.dart';
+import '../../core/widgets/glass_container.dart';
 import '../../models/venta.dart';
 import '../../providers/producto_provider.dart';
 import '../../providers/venta_provider.dart';
@@ -237,20 +239,23 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
+    return GlassContainer(
+      borderRadius: GlassTokens.borderRadiusLarge,
+      blur: GlassTokens.blurMedium,
+      borderColor: Colors.transparent,
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.1),
+          blurRadius: 10,
+          offset: const Offset(0, -2),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
+      ],
+      // Only top corners are rounded; bottom edge is flush with screen bottom
+      customDecoration: BoxDecoration(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(GlassTokens.borderRadiusLarge),
+          topRight: Radius.circular(GlassTokens.borderRadiusLarge),
+        ),
       ),
       child: switch (_panelState) {
         CartPanelState.cart => _buildCartView(theme),
@@ -274,10 +279,10 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: theme.colorScheme.primaryContainer,
+            color: Colors.white.withValues(alpha: 0.15),
             borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(20),
-              topRight: Radius.circular(20),
+              topLeft: Radius.circular(GlassTokens.borderRadiusLarge),
+              topRight: Radius.circular(GlassTokens.borderRadiusLarge),
             ),
           ),
           child: Row(
@@ -560,23 +565,6 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
                       vertical: 14,
                     ),
                   ),
-                ),
-                // Botones de montos rápidos
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [20, 50, 100, 200, 500]
-                      .where((m) => m >= total)
-                      .take(4)
-                      .map((m) => ActionChip(
-                            label: Text('\$$m'),
-                            onPressed: () {
-                              _montoController.text = m.toStringAsFixed(0);
-                              setState(() {});
-                            },
-                          ))
-                      .toList(),
                 ),
               ],
             ),

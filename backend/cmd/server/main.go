@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ferreteria/backend/config"
+	"github.com/ferreteria/backend/internal/caja"
 	"github.com/ferreteria/backend/internal/handler"
 	"github.com/ferreteria/backend/internal/ia"
 	"github.com/ferreteria/backend/internal/pagos"
@@ -50,18 +51,13 @@ func main() {
 	syncHandler := ia.NewSyncHandler(ventaService)
 	chatHandler := ia.NewChatHandler(db)
 
-	// Conectar el ChatHandler con el CopilotService global (para reusar LLMClient)
 	ia.SetCopilotGlobal(iaHandler.Copilot())
 
-	// Refrescar el catálogo del chat al iniciar (en background-safe)
 	go func() {
 		time.Sleep(500 * time.Millisecond)
 		chatHandler.RefrescarProductos()
 	}()
 
-	// Módulo de pagos (Stripe Fase 1A, multi-proveedor a futuro).
-	// Si no hay claves configuradas, el manager arranca sin drivers y los
-	// endpoints devolverán 503 PROVIDER_UNAVAILABLE — el server sigue arriba.
 	pagosMgr, err := pagos.NewManager(pagos.ManagerConfig{
 		Principal:           os.Getenv("PAGOS_PROVEEDOR_PRINCIPAL"),
 		StripeSecretKey:     os.Getenv("STRIPE_SECRET_KEY"),
@@ -74,7 +70,17 @@ func main() {
 	pagosRepo := repository.NewPagoRepository(db)
 	pagosHandler := pagos.NewHandler(pagosMgr, pagosRepo, ventaRepo)
 
-	r := router.SetupRouter(productoHandler, ventaHandler, entradaHandler, iaHandler, syncHandler, chatHandler, pagosHandler)
+	// Sesi�n de caja compartida (sync multi-dispositivo SSE)
+	sesionHub := caja.NewHub()
+	sesionRepo := caja.NewSesionRepo(db)
+	sesionService := caja.NewSesionService(sesionRepo, sesionHub, productoRepo)
+	sesionHandler := caja.NewSesionHandler(sesionService, sesionHub)
+
+	r := router.SetupRouter(
+		productoHandler, ventaHandler, entradaHandler,
+		iaHandler, syncHandler, chatHandler, pagosHandler,
+		sesionHandler,
+	)
 
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {
@@ -85,10 +91,10 @@ func main() {
 
 	srv := &http.Server{
 		Handler:           r,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      15 * time.Second,
-		IdleTimeout:       60 * time.Second,
+		ReadHeaderTimeout: 30 * time.Second,
+		ReadTimeout:       20 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	ln, err := net.Listen("tcp", addr)

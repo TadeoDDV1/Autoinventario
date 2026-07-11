@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ferreteria/backend/internal/caja"
 	"github.com/ferreteria/backend/internal/handler"
 	"github.com/ferreteria/backend/internal/ia"
 	"github.com/ferreteria/backend/internal/pagos"
@@ -15,7 +16,16 @@ import (
 
 const RequestIDHeader = "X-Request-ID"
 
-func SetupRouter(productoHandler *handler.ProductoHandler, ventaHandler *handler.VentaHandler, entradaHandler *handler.EntradaHandler, iaHandler *ia.Handler, syncHandler *ia.SyncHandler, chatHandler *ia.ChatHandler, pagosHandler *pagos.Handler) *gin.Engine {
+func SetupRouter(
+	productoHandler *handler.ProductoHandler,
+	ventaHandler *handler.VentaHandler,
+	entradaHandler *handler.EntradaHandler,
+	iaHandler *ia.Handler,
+	syncHandler *ia.SyncHandler,
+	chatHandler *ia.ChatHandler,
+	pagosHandler *pagos.Handler,
+	cajaHandler *caja.SesionHandler,
+) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -67,30 +77,33 @@ func SetupRouter(productoHandler *handler.ProductoHandler, ventaHandler *handler
 			entradas.POST("", entradaHandler.Create)
 		}
 
-		// IA: copilot + dashboard
 		ia := api.Group("/ia")
 		{
 			ia.GET("/sugerencias", iaHandler.GetSugerencias)
 			ia.GET("/inventario/predicciones", iaHandler.GetPredicciones)
 
-			// Chat IA conversacional
 			ia.POST("/chat", chatHandler.Chat)
 			ia.POST("/toggle", chatHandler.ToggleIA)
 			ia.GET("/estado", chatHandler.GetEstado)
 
-			// Sugeridor de productos nuevos (autocompletado)
 			ia.GET("/sugerir-producto", iaHandler.SugerirProducto)
 		}
 
-		// Dashboard ejecutivo
 		api.GET("/dashboard/resumen", iaHandler.GetDashboard)
 
-		// Sync batch (ventas offline)
 		api.POST("/sync/ventas", syncHandler.SyncVentas)
 
-		// Pagos (Stripe Fase 1A + multi-proveedor a futuro)
-		// El webhook vive en su propio grupo para que CORS/logging se apliquen igual
-		// pero sin requerir auth (los webhooks llegan sin Authorization header).
+		// Sesi�n de caja compartida (sync multi-dispositivo)
+		cajaGroup := api.Group("/caja")
+		{
+			cajaGroup.GET("/sesion", cajaHandler.ObtenerEstado)
+			cajaGroup.POST("/sesion/items", cajaHandler.AgregarItem)
+			cajaGroup.PUT("/sesion/items/:producto_id", cajaHandler.SetCantidad)
+			cajaGroup.DELETE("/sesion/items/:producto_id", cajaHandler.RemoverItem)
+			cajaGroup.POST("/sesion/clear", cajaHandler.Limpiar)
+			cajaGroup.GET("/sesion/stream", cajaHandler.StreamSSE)
+		}
+
 		pagosGroup := api.Group("/pagos")
 		{
 			pagosGroup.GET("/providers", pagosHandler.ListProviders)
@@ -145,7 +158,8 @@ func corsMiddleware() gin.HandlerFunc {
 			c.Header("Access-Control-Allow-Origin", "*")
 		}
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, "+RequestIDHeader)
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID, X-Device-Id")
+		c.Header("Access-Control-Expose-Headers", "Content-Type, X-Request-ID")
 		c.Header("Access-Control-Max-Age", "600")
 
 		if c.Request.Method == http.MethodOptions {

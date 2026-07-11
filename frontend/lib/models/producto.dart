@@ -8,21 +8,21 @@ class Producto {
   final int stockActual;
   final int stockMinimo;
   final int? categoriaId;
-  final String? imagenUrl;
   final bool activo;
   final String? categoriaNombre;
+  final String? uso;
 
   const Producto({
     required this.id,
     this.codigoBarras,
     required this.nombre,
     this.descripcion,
+    this.uso,
     required this.precioCompra,
     required this.precioVenta,
     required this.stockActual,
     required this.stockMinimo,
     this.categoriaId,
-    this.imagenUrl,
     required this.activo,
     this.categoriaNombre,
   });
@@ -38,7 +38,7 @@ class Producto {
       stockActual: json['stock_actual'] as int,
       stockMinimo: json['stock_minimo'] as int,
       categoriaId: json['categoria_id'] as int?,
-      imagenUrl: json['imagen_url'] as String?,
+      uso: json['uso'] as String?,
       activo: json['activo'] as bool,
       categoriaNombre: json['categoria_nombre'] as String?,
     );
@@ -53,8 +53,8 @@ class Producto {
       'precio_venta': precioVenta,
       'stock_actual': stockActual,
       'stock_minimo': stockMinimo,
+      'uso': uso,
       'categoria_id': categoriaId,
-      'imagen_url': imagenUrl,
     };
   }
 

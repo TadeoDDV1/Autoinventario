@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/glass_tokens.dart';
+import '../../core/widgets/glass_container.dart';
 import 'dashboard_constants.dart';
 
 /// Hero card: la métrica principal del dashboard (Ventas hoy).
@@ -30,99 +32,85 @@ class MetricaPrincipalCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(DashboardRadius.lg),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(DashboardRadius.lg),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(width: 4, color: colorPrimario),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(DashboardSpacing.xl - 4),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(icon, color: colorPrimario, size: 18),
-                                const SizedBox(
-                                    width: DashboardSpacing.sm),
-                                Flexible(
-                                  child: Text(
-                                    titulo.toUpperCase(),
-                                    style: theme.textTheme.labelMedium
-                                        ?.copyWith(
-                                      color: theme
-                                          .colorScheme.onSurfaceVariant,
-                                      letterSpacing: 1.2,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
+    return GlassContainer(
+      borderRadius: DashboardRadius.lg,
+      blur: GlassTokens.blurSmall,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(width: 4, color: colorPrimario),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(DashboardSpacing.xl - 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(icon, color: colorPrimario, size: 18),
+                              const SizedBox(width: DashboardSpacing.sm),
+                              Flexible(
+                                child: Text(
+                                  titulo.toUpperCase(),
+                                  style: theme.textTheme.labelMedium
+                                      ?.copyWith(
+                                    color: theme
+                                        .colorScheme.onSurfaceVariant,
+                                    letterSpacing: 1.2,
+                                    fontWeight: FontWeight.w600,
                                   ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: DashboardSpacing.sm),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                valor,
-                                style: TextStyle(
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.w800,
-                                  color: theme.colorScheme.onSurface,
-                                  height: 1.1,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: DashboardSpacing.xs),
-                            Text(
-                              subtitulo,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            if (meta != null) ...[
-                              const SizedBox(height: DashboardSpacing.xs),
-                              Text(
-                                meta!,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.outline,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
+                          ),
+                          const SizedBox(height: DashboardSpacing.sm),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              valor,
+                              style: TextStyle(
+                                fontSize: 32,
+                                fontWeight: FontWeight.w800,
+                                color: theme.colorScheme.onSurface,
+                                height: 1.1,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: DashboardSpacing.xs),
+                          Text(
+                            subtitulo,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          if (meta != null) ...[
+                            const SizedBox(height: DashboardSpacing.xs),
+                            Text(
+                              meta!,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.outline,
+                              ),
+                            ),
                           ],
-                        ),
+                        ],
                       ),
-                      if (trailing != null) ...[
-                        const SizedBox(width: DashboardSpacing.md),
-                        trailing!,
-                      ],
+                    ),
+                    if (trailing != null) ...[
+                      const SizedBox(width: DashboardSpacing.md),
+                      trailing!,
                     ],
-                  ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

@@ -126,7 +126,7 @@ void main() {
         // Campos OCULTOS en modo rápido
         expect(find.widgetWithText(TextFormField, 'Descripción'),
             findsNothing);
-        expect(find.widgetWithText(TextFormField, 'URL de Imagen (Opcional)'),
+        expect(find.widgetWithText(TextFormField, 'Uso / Aplicaciones'),
             findsNothing);
         expect(find.widgetWithText(TextFormField, 'Precio compra *'),
             findsNothing);
@@ -280,7 +280,7 @@ void main() {
         // El form completo debe estar visible: aparecen los campos ocultos
         expect(find.widgetWithText(TextFormField, 'Descripción'),
             findsOneWidget);
-        expect(find.widgetWithText(TextFormField, 'URL de Imagen (Opcional)'),
+        expect(find.widgetWithText(TextFormField, 'Uso / Aplicaciones'),
             findsOneWidget);
         expect(find.widgetWithText(TextFormField, 'Precio compra *'),
             findsOneWidget);

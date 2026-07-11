@@ -73,13 +73,13 @@ func (r *ProductoRepository) GetByID(id int) (*models.Producto, error) {
 }
 
 func (r *ProductoRepository) Create(p *models.ProductoCreate) (int64, error) {
-	query := `INSERT INTO productos (codigo_barras, nombre, descripcion, precio_compra, precio_venta, stock_actual, stock_minimo, categoria_id, imagen_url)
+	query := `INSERT INTO productos (codigo_barras, nombre, descripcion, uso, precio_compra, precio_venta, stock_actual, stock_minimo, categoria_id)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	result, err := r.db.Exec(query,
-		p.CodigoBarras, p.Nombre, p.Descripcion,
+		p.CodigoBarras, p.Nombre, p.Descripcion, p.Uso,
 		p.PrecioCompra, p.PrecioVenta, p.StockActual,
-		p.StockMinimo, p.CategoriaID, p.ImagenURL)
+		p.StockMinimo, p.CategoriaID)
 	if err != nil {
 		return 0, err
 	}
@@ -123,9 +123,9 @@ func (r *ProductoRepository) Update(id int, p *models.ProductoUpdate) error {
 		setClauses = append(setClauses, "categoria_id = ?")
 		args = append(args, *p.CategoriaID)
 	}
-	if p.ImagenURL != nil {
-		setClauses = append(setClauses, "imagen_url = ?")
-		args = append(args, *p.ImagenURL)
+	if p.Uso != nil {
+		setClauses = append(setClauses, "uso = ?")
+		args = append(args, *p.Uso)
 	}
 
 	if len(setClauses) == 0 {

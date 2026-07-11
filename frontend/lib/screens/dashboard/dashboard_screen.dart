@@ -5,6 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/format/money.dart';
+import '../../core/theme/glass_tokens.dart';
+import '../../core/widgets/atmospheric_background.dart';
+import '../../core/widgets/glass_container.dart';
 import '../../models/sugerencia.dart';
 import '../../providers/ia_provider.dart';
 import '../../widgets/dashboard/dashboard_constants.dart';
@@ -84,30 +87,40 @@ class DashboardScreen extends ConsumerWidget {
         ? double.infinity
         : (variant == DashboardLayoutVariant.tablet ? 720.0 : 1100.0);
 
-    return Center(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth),
-        child: ListView(
-          padding: const EdgeInsets.all(DashboardSpacing.lg),
-          children: [
-            _buildHeader(context, ref, theme, resumen),
-            const SizedBox(height: DashboardSpacing.lg),
-            _buildMetricasRow(context, resumen, formatter, variant),
-            if (variant == DashboardLayoutVariant.desktop) ...[
-              const SizedBox(height: DashboardSpacing.lg),
-              _buildTopYChartRow(context, ref, resumen),
-            ] else ...[
-              const SizedBox(height: DashboardSpacing.xl),
-              _buildTopProductos(context, ref, resumen),
-              const SizedBox(height: DashboardSpacing.xl),
-              _buildStockAlertas(context, resumen),
-              const SizedBox(height: DashboardSpacing.xl),
-              _buildChart(context, resumen),
-            ],
-            const SizedBox(height: DashboardSpacing.xl),
-          ],
+    return Stack(
+      children: [
+        const AtmosphericBackground(),
+        Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            child: ListView(
+              padding: const EdgeInsets.all(DashboardSpacing.lg),
+              children: [
+                GlassContainer(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  borderRadius: GlassTokens.borderRadiusMedium,
+                  blur: GlassTokens.blurSmall,
+                  child: _buildHeader(context, ref, theme, resumen),
+                ),
+                const SizedBox(height: DashboardSpacing.lg),
+                _buildMetricasRow(context, resumen, formatter, variant),
+                if (variant == DashboardLayoutVariant.desktop) ...[
+                  const SizedBox(height: DashboardSpacing.lg),
+                  _buildTopYChartRow(context, ref, resumen),
+                ] else ...[
+                  const SizedBox(height: DashboardSpacing.xl),
+                  _buildTopProductos(context, ref, resumen),
+                  const SizedBox(height: DashboardSpacing.xl),
+                  _buildStockAlertas(context, resumen),
+                  const SizedBox(height: DashboardSpacing.xl),
+                  _buildChart(context, resumen),
+                ],
+                const SizedBox(height: DashboardSpacing.xl),
+              ],
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -141,13 +154,7 @@ class DashboardScreen extends ConsumerWidget {
         ),
       ],
     );
-    return Animate(
-      effects: const [
-        FadeEffect(duration: Duration(milliseconds: 200)),
-        SlideEffect(begin: Offset(0, -0.05)),
-      ],
-      child: row,
-    );
+    return row;
   }
 
   Widget _buildMetricasRow(
@@ -275,12 +282,10 @@ class DashboardScreen extends ConsumerWidget {
         TopProductosList(productos: resumen.topProductos),
       ],
     );
-    return Animate(
-      effects: const [
-        FadeEffect(duration: Duration(milliseconds: 300)),
-        SlideEffect(begin: Offset(0, 0.05)),
-      ],
-      delay: const Duration(milliseconds: 200),
+    return GlassContainer(
+      padding: const EdgeInsets.all(DashboardSpacing.md),
+      borderRadius: GlassTokens.borderRadiusMedium,
+      blur: GlassTokens.blurSmall,
       child: content,
     );
   }
@@ -301,12 +306,10 @@ class DashboardScreen extends ConsumerWidget {
         ),
       ],
     );
-    return Animate(
-      effects: const [
-        FadeEffect(duration: Duration(milliseconds: 300)),
-        SlideEffect(begin: Offset(0, 0.05)),
-      ],
-      delay: const Duration(milliseconds: 280),
+    return GlassContainer(
+      padding: const EdgeInsets.all(DashboardSpacing.md),
+      borderRadius: GlassTokens.borderRadiusMedium,
+      blur: GlassTokens.blurSmall,
       child: content,
     );
   }
@@ -320,12 +323,10 @@ class DashboardScreen extends ConsumerWidget {
           icon: Icons.bar_chart,
         ),
         if (resumen.ventasUltimos7Dias.isEmpty)
-          Container(
+          GlassContainer(
             padding: const EdgeInsets.all(DashboardSpacing.xl),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(DashboardRadius.md),
-            ),
+            borderRadius: DashboardRadius.md,
+            blur: GlassTokens.blurSmall,
             child: Center(
               child: Text(
                 'Sin datos de los últimos 7 días',
@@ -337,12 +338,10 @@ class DashboardScreen extends ConsumerWidget {
           VentasChart(dias: resumen.ventasUltimos7Dias),
       ],
     );
-    return Animate(
-      effects: const [
-        FadeEffect(duration: Duration(milliseconds: 300)),
-        SlideEffect(begin: Offset(0, 0.05)),
-      ],
-      delay: const Duration(milliseconds: 360),
+    return GlassContainer(
+      padding: const EdgeInsets.all(DashboardSpacing.md),
+      borderRadius: GlassTokens.borderRadiusMedium,
+      blur: GlassTokens.blurSmall,
       child: content,
     );
   }

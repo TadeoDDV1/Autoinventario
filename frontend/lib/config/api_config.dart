@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 /// Cambia esto si tu compu tiene otra IP en la red.
 const String _backendHost = String.fromEnvironment(
   'BACKEND_HOST',
-  defaultValue: '172.44.30.9',
+  defaultValue: '10.0.2.2',
 );
 const int _backendPort = 8080;
 

@@ -44,7 +44,6 @@ dependencies:
   barcode_widget: ^2.0.4
   shared_preferences: ^2.3.4
   mobile_scanner: ^5.2.3
-  cached_network_image: ^3.4.1
   shimmer: ^3.0.0
   # PDF y impresión de tickets
   pdf: ^3.11.3

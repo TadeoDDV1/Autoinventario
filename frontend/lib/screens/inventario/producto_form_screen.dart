@@ -40,7 +40,7 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
   final _precioVentaController = TextEditingController();
   final _stockActualController = TextEditingController();
   final _stockMinimoController = TextEditingController();
-  final _imagenUrlController = TextEditingController();
+  final _usoController = TextEditingController();
   int? _selectedCategoriaId;
   bool _isLoading = false;
   bool get _isEditing => widget.productoId != null;
@@ -94,7 +94,7 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
         _precioVentaController.text = producto.precioVenta.toStringAsFixed(2);
         _stockActualController.text = producto.stockActual.toString();
         _stockMinimoController.text = producto.stockMinimo.toString();
-        _imagenUrlController.text = producto.imagenUrl ?? '';
+        _usoController.text = producto.uso ?? '';
         _selectedCategoriaId = producto.categoriaId;
         setState(() => _isLoading = false);
       }
@@ -128,7 +128,7 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
     _precioVentaController.dispose();
     _stockActualController.dispose();
     _stockMinimoController.dispose();
-    _imagenUrlController.dispose();
+    _usoController.dispose();
     super.dispose();
   }
 
@@ -151,8 +151,8 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
     if (_descripcionController.text.trim().isNotEmpty) {
       data['descripcion'] = _descripcionController.text.trim();
     }
-    if (_imagenUrlController.text.trim().isNotEmpty) {
-      data['imagen_url'] = _imagenUrlController.text.trim();
+    if (_usoController.text.trim().isNotEmpty) {
+      data['uso'] = _usoController.text.trim();
     }
     if (_selectedCategoriaId != null) {
       data['categoria_id'] = _selectedCategoriaId;
@@ -273,20 +273,22 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
                         if (!_esRapido) ...[
                           const SizedBox(height: 16),
                           TextFormField(
-                            controller: _imagenUrlController,
-                            decoration: const InputDecoration(
-                              labelText: 'URL de Imagen (Opcional)',
-                              prefixIcon: Icon(Icons.image_outlined),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          TextFormField(
                             controller: _descripcionController,
                             decoration: const InputDecoration(
                               labelText: 'Descripción',
                               prefixIcon: Icon(Icons.description_outlined),
                             ),
                             maxLines: 3,
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _usoController,
+                            maxLines: 2,
+                            decoration: const InputDecoration(
+                              labelText: 'Uso / Aplicaciones',
+                              prefixIcon: Icon(Icons.build_circle_outlined),
+                              helperText: 'Opcional: principales usos o aplicaciones del producto',
+                            ),
                           ),
                           const SizedBox(height: 16),
                           categoriasAsync.when(

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/glass_tokens.dart';
+import '../../core/widgets/glass_container.dart';
 import 'dashboard_constants.dart';
 
 /// Card de métrica secundaria. Más compacta que [MetricaPrincipalCard]:
@@ -25,14 +27,11 @@ class MetricaSecundariaCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
+    return GlassContainer(
       height: DashboardSizes.cardSecundariaHeight,
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(DashboardRadius.md),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
       padding: const EdgeInsets.all(DashboardSpacing.md),
+      borderRadius: DashboardRadius.md,
+      blur: GlassTokens.blurSmall,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,

@@ -9,6 +9,9 @@ import '../chat/tarjeta_sugerencia.dart';
 /// Panel colapsable de sugerencias IA en el POS.
 /// Se muestra debajo del input de código, con animación de entrada/salida.
 /// Reacciona automáticamente cuando cambia el carrito.
+///
+/// @deprecated Reemplazado por [IaChatBubble] en la pantalla de caja.
+@Deprecated('Usar IaChatBubble en su lugar')
 class CopilotPanel extends ConsumerStatefulWidget {
   const CopilotPanel({super.key});
 
