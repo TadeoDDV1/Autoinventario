@@ -14,6 +14,7 @@ var (
 	ErrStockInsuficiente = errors.New("stock insuficiente")
 	ErrNoHayCampos       = errors.New("no hay campos para actualizar")
 	ErrIDInvalido        = errors.New("id inválido")
+	ErrSKUExiste         = errors.New("ya existe un producto con ese SKU")
 )
 
 type StockError struct {

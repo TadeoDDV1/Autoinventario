@@ -85,6 +85,7 @@ class CarritoNotifier extends Notifier<List<CarritoItem>> {
       final json = state.map((item) => item.toJson()).toList();
       await prefs.setString(_carritoKey, jsonEncode(json));
     } catch (_) {
+      // Silenciar errores de persistencia del carrito
     }
   }
 
@@ -108,6 +109,7 @@ class CarritoNotifier extends Notifier<List<CarritoItem>> {
     try {
       ref.read(cajaSesionServiceProvider).agregarItem(productoId);
     } catch (_) {
+      // Silenciar errores de sync offline
     }
   }
 
@@ -121,6 +123,7 @@ class CarritoNotifier extends Notifier<List<CarritoItem>> {
     try {
       ref.read(cajaSesionServiceProvider).removerItem(productoId);
     } catch (_) {
+      // Silenciar errores de sync offline
     }
   }
 
@@ -145,6 +148,7 @@ class CarritoNotifier extends Notifier<List<CarritoItem>> {
     try {
       ref.read(cajaSesionServiceProvider).setCantidad(productoId, cantidad);
     } catch (_) {
+      // Silenciar errores de sync offline
     }
   }
 
@@ -193,6 +197,7 @@ class CarritoNotifier extends Notifier<List<CarritoItem>> {
     try {
       ref.read(cajaSesionServiceProvider).limpiar();
     } catch (_) {
+      // Silenciar errores de sync offline
     }
   }
 

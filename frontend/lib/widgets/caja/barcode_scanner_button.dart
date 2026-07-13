@@ -104,7 +104,9 @@ class _BarcodeScannerSheetState extends State<_BarcodeScannerSheet> {
     _disposed = true;
     try {
       _controller.stop();
-    } catch (_) {}
+    } catch (_) {
+      // El scanner pudo no haberse inicializado aún
+    }
     _controller.dispose();
     super.dispose();
   }
@@ -119,7 +121,9 @@ class _BarcodeScannerSheetState extends State<_BarcodeScannerSheet> {
     setState(() => _procesando = true);
     try {
       _controller.stop();
-    } catch (_) {}
+    } catch (_) {
+      // El scanner pudo no haberse inicializado aún
+    }
     if (mounted) {
       Navigator.of(context).pop(value);
     }

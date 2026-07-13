@@ -10,7 +10,6 @@ import (
 	"github.com/ferreteria/backend/internal/caja"
 	"github.com/ferreteria/backend/internal/handler"
 	"github.com/ferreteria/backend/internal/ia"
-	"github.com/ferreteria/backend/internal/pagos"
 	"github.com/gin-gonic/gin"
 )
 
@@ -23,7 +22,6 @@ func SetupRouter(
 	iaHandler *ia.Handler,
 	syncHandler *ia.SyncHandler,
 	chatHandler *ia.ChatHandler,
-	pagosHandler *pagos.Handler,
 	cajaHandler *caja.SesionHandler,
 ) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
@@ -73,6 +71,7 @@ func SetupRouter(
 		entradas := api.Group("/entradas")
 		{
 			entradas.GET("", entradaHandler.GetAll)
+			entradas.GET("/historial", entradaHandler.GetHistorial)
 			entradas.GET("/:id", entradaHandler.GetByID)
 			entradas.POST("", entradaHandler.Create)
 		}
@@ -102,16 +101,6 @@ func SetupRouter(
 			cajaGroup.DELETE("/sesion/items/:producto_id", cajaHandler.RemoverItem)
 			cajaGroup.POST("/sesion/clear", cajaHandler.Limpiar)
 			cajaGroup.GET("/sesion/stream", cajaHandler.StreamSSE)
-		}
-
-		pagosGroup := api.Group("/pagos")
-		{
-			pagosGroup.GET("/providers", pagosHandler.ListProviders)
-			pagosGroup.POST("/charges", pagosHandler.CreateCharge)
-			pagosGroup.GET("/charges/:referencia", pagosHandler.GetCharge)
-			pagosGroup.POST("/charges/:referencia/refund", pagosHandler.Refund)
-			pagosGroup.GET("/venta/:venta_id", pagosHandler.ListByVenta)
-			pagosGroup.POST("/webhook", pagosHandler.Webhook)
 		}
 	}
 

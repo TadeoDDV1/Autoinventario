@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/ferreteria/backend/internal/apperrors"
 	"github.com/ferreteria/backend/internal/models"
@@ -52,6 +53,51 @@ func (h *EntradaHandler) GetAll(c *gin.Context) {
 	entradas, total, err := h.service.GetAll(page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIError{Error: "INTERNAL_ERROR", Message: "Error al obtener entradas"})
+		return
+	}
+
+	totalPages := int(total) / pageSize
+	if int(total)%pageSize > 0 {
+		totalPages++
+	}
+
+	c.JSON(http.StatusOK, models.PaginatedResponse{
+		Data:       entradas,
+		Total:      total,
+		Page:       page,
+		PageSize:   pageSize,
+		TotalPages: totalPages,
+	})
+}
+
+// GetHistorial devuelve entradas filtradas por rango de fechas (YYYY-MM-DD).
+// Parámetros opcionales: `desde`, `hasta`. Si faltan, devuelve todas.
+func (h *EntradaHandler) GetHistorial(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+
+	parseDate := func(key string) (time.Time, error) {
+		v := c.Query(key)
+		if v == "" {
+			return time.Time{}, nil
+		}
+		return time.Parse("2006-01-02", v)
+	}
+
+	desde, err := parseDate("desde")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIError{Error: "BAD_REQUEST", Message: "desde inválido (YYYY-MM-DD)"})
+		return
+	}
+	hasta, err := parseDate("hasta")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIError{Error: "BAD_REQUEST", Message: "hasta inválido (YYYY-MM-DD)"})
+		return
+	}
+
+	entradas, total, err := h.service.GetByDateRange(desde, hasta, page, pageSize)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIError{Error: "INTERNAL_ERROR", Message: "Error al obtener historial"})
 		return
 	}
 

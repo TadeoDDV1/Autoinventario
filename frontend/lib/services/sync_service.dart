@@ -97,11 +97,11 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
         }
         await cache.marcarSincronizadas(idsExito);
         ref.invalidate(colaVentasCountProvider);
-        debugPrint('Sync: ${idsExito.length}/${cola.length} ventas sincronizadas');
+        if (kDebugMode) debugPrint('Sync: ${idsExito.length}/${cola.length} ventas sincronizadas');
         return idsExito.length;
       }
     } catch (e) {
-      debugPrint('Sync error: $e');
+      if (kDebugMode) debugPrint('Sync error: $e');
     } finally {
       state = ConectividadEstado.online;
     }

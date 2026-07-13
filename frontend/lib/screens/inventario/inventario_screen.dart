@@ -81,6 +81,24 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
             ),
             actions: [
               IconButton(
+                onPressed: () => context.go('/inventario/entrada'),
+                icon: const Icon(Icons.add_shopping_cart),
+                tooltip: 'Entrada de inventario',
+                style: IconButton.styleFrom(
+                  backgroundColor: theme.colorScheme.tertiaryContainer,
+                ),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                onPressed: () => context.go('/inventario/entradas'),
+                icon: const Icon(Icons.history),
+                tooltip: 'Historial de entradas',
+                style: IconButton.styleFrom(
+                  backgroundColor: theme.colorScheme.secondaryContainer,
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
                 onPressed: () => context.go('/inventario/predicciones'),
                 icon: const Icon(Icons.auto_graph),
                 tooltip: 'Análisis predictivo (IA)',
@@ -244,6 +262,10 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
                 context.go('/inventario/escanear');
               } else if (value == 'manual') {
                 context.go('/inventario/nuevo');
+              } else if (value == 'entrada') {
+                context.go('/inventario/entrada');
+              } else if (value == 'historial_entradas') {
+                context.go('/inventario/entradas');
               }
             },
             itemBuilder: (_) => [
@@ -264,6 +286,26 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
                     Icon(Icons.edit_note),
                     SizedBox(width: 12),
                     Text('Registro manual'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'entrada',
+                child: Row(
+                  children: [
+                    Icon(Icons.add_shopping_cart),
+                    SizedBox(width: 12),
+                    Text('Entrada de inventario'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'historial_entradas',
+                child: Row(
+                  children: [
+                    Icon(Icons.history),
+                    SizedBox(width: 12),
+                    Text('Historial de entradas'),
                   ],
                 ),
               ),

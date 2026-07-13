@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/format/money.dart';
+import '../../core/theme/glass_tokens.dart';
+import '../../core/widgets/atmospheric_background.dart';
+import '../../core/widgets/glass_container.dart';
 import '../../models/venta.dart';
 import '../../providers/venta_provider.dart';
 
@@ -31,174 +34,173 @@ class HistorialVentasScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: ventasAsync.when(
-        data: (ventas) {
-          if (ventas.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.receipt_long,
-                    size: 80,
-                    color: theme.colorScheme.outline,
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Sin ventas registradas',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Las ventas aparecerán aquí',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: ventas.length,
-            itemBuilder: (context, index) {
-              final venta = ventas[index];
-              final esEfectivo =
-                  MetodoPago.fromString(venta.metodoPago) ==
-                      MetodoPago.efectivo;
-
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: InkWell(
-                  onTap: () => _mostrarDetalle(context, theme, venta, dateFormat, timeFormat),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: esEfectivo
-                                ? Colors.green.shade50
-                                : Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            esEfectivo ? Icons.money : Icons.credit_card,
-                            color: esEfectivo
-                                ? Colors.green.shade700
-                                : Colors.blue.shade700,
-                          ),
+      body: Stack(
+        children: [
+          const AtmosphericBackground(),
+          ventasAsync.when(
+            data: (ventas) {
+              if (ventas.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.receipt_long,
+                        size: 80,
+                        color: theme.colorScheme.outline,
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        'Sin ventas registradas',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Las ventas aparecerán aquí',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              return ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: ventas.length,
+                itemBuilder: (context, index) {
+                  final venta = ventas[index];
+                  final esEfectivo =
+                      MetodoPago.fromString(venta.metodoPago) ==
+                          MetodoPago.efectivo;
+
+                  return GlassContainer(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(16),
+                    borderRadius: GlassTokens.borderRadiusMedium,
+                    blur: GlassTokens.blurSmall,
+                    child: InkWell(
+                      onTap: () => _mostrarDetalle(context, theme, venta, dateFormat, timeFormat),
+                      borderRadius: BorderRadius.circular(GlassTokens.borderRadiusMedium),
+                      child: Row(
+                        children: [
+                          GlassContainer(
+                            width: 48,
+                            height: 48,
+                            borderRadius: GlassTokens.borderRadiusSmall,
+                            blur: GlassTokens.blurSmall,
+                            color: esEfectivo
+                                ? Colors.green.withValues(alpha: 0.2)
+                                : Colors.blue.withValues(alpha: 0.2),
+                            child: Icon(
+                              esEfectivo ? Icons.money : Icons.credit_card,
+                              color: esEfectivo
+                                  ? Colors.green.shade700
+                                  : Colors.blue.shade700,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  venta.folio ?? 'N/A',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${dateFormat.format(venta.fecha ?? DateTime.now())} · ${timeFormat.format(venta.fecha ?? DateTime.now())}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                                Text(
+                                  '${venta.detalles.length} producto${venta.detalles.length != 1 ? 's' : ''}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Text(
-                                venta.folio ?? 'N/A',
+                                money.format(venta.total),
                                 style: theme.textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.bold,
+                                  color: theme.colorScheme.primary,
                                 ),
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${dateFormat.format(venta.fecha ?? DateTime.now())} · ${timeFormat.format(venta.fecha ?? DateTime.now())}',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
+                              GlassContainer(
+                                margin: const EdgeInsets.only(top: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
                                 ),
-                              ),
-                              Text(
-                                '${venta.detalles.length} producto${venta.detalles.length != 1 ? 's' : ''}',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
+                                borderRadius: GlassTokens.borderRadiusSmall,
+                                blur: GlassTokens.blurSmall,
+                                color: esEfectivo
+                                    ? Colors.green.withValues(alpha: 0.2)
+                                    : Colors.blue.withValues(alpha: 0.2),
+                                child: Text(
+                                  esEfectivo ? 'Efectivo' : 'Tarjeta',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: esEfectivo
+                                        ? Colors.green.shade700
+                                        : Colors.blue.shade700,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              money.format(venta.total),
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: theme.colorScheme.primary,
-                              ),
-                            ),
-                            Container(
-                              margin: const EdgeInsets.only(top: 4),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: esEfectivo
-                                    ? Colors.green.shade50
-                                    : Colors.blue.shade50,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                esEfectivo ? 'Efectivo' : 'Tarjeta',
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: esEfectivo
-                                      ? Colors.green.shade700
-                                      : Colors.blue.shade700,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               );
             },
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.error_outline,
-                size: 64,
-                color: theme.colorScheme.error,
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, _) => Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    size: 64,
+                    color: theme.colorScheme.error,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error al cargar historial',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    error.toString(),
+                    style: theme.textTheme.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: () => ref.invalidate(ventasProvider),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Reintentar'),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              Text(
-                'Error al cargar historial',
-                style: theme.textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                error.toString(),
-                style: theme.textTheme.bodySmall,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: () => ref.invalidate(ventasProvider),
-                icon: const Icon(Icons.refresh),
-                label: const Text('Reintentar'),
-              ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -240,42 +242,40 @@ class HistorialVentasScreen extends ConsumerWidget {
                 ),
               ),
 
-              // Header
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(12),
+                // Header
+                Row(
+                  children: [
+                    GlassContainer(
+                      padding: const EdgeInsets.all(12),
+                      borderRadius: GlassTokens.borderRadiusMedium,
+                      blur: GlassTokens.blurSmall,
+                      child: Icon(
+                        Icons.receipt,
+                        color: theme.colorScheme.onPrimaryContainer,
+                      ),
                     ),
-                    child: Icon(
-                      Icons.receipt,
-                      color: theme.colorScheme.onPrimaryContainer,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          venta.folio ?? 'N/A',
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            venta.folio ?? 'N/A',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                        Text(
-                          '${dateFormat.format(venta.fecha ?? DateTime.now())} · ${timeFormat.format(venta.fecha ?? DateTime.now())}',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
+                          Text(
+                            '${dateFormat.format(venta.fecha ?? DateTime.now())} · ${timeFormat.format(venta.fecha ?? DateTime.now())}',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
 
               const SizedBox(height: 24),
 
@@ -291,18 +291,17 @@ class HistorialVentasScreen extends ConsumerWidget {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Row(
                   children: [
-                    Container(
+                    GlassContainer(
                       width: 32,
                       height: 32,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '${detalle.cantidad}x',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
+                      borderRadius: GlassTokens.borderRadiusSmall,
+                      blur: GlassTokens.blurSmall,
+                      child: Center(
+                        child: Text(
+                          '${detalle.cantidad}x',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
@@ -354,12 +353,10 @@ class HistorialVentasScreen extends ConsumerWidget {
               const SizedBox(height: 16),
 
               // Método de pago
-              Container(
+              GlassContainer(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                borderRadius: GlassTokens.borderRadiusMedium,
+                blur: GlassTokens.blurSmall,
                 child: Row(
                   children: [
                     Icon(
@@ -392,12 +389,11 @@ class HistorialVentasScreen extends ConsumerWidget {
 
               if (venta.cambio != null && venta.cambio! > 0) ...[
                 const SizedBox(height: 8),
-                Container(
+                GlassContainer(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  borderRadius: GlassTokens.borderRadiusMedium,
+                  blur: GlassTokens.blurSmall,
+                  color: Colors.green.withValues(alpha: 0.15),
                   child: Row(
                     children: [
                       Icon(Icons.currency_exchange, color: Colors.green.shade700),

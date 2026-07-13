@@ -246,7 +246,9 @@ class _SelectedTooltip extends StatelessWidget {
       final dt = DateTime.parse(dia.fecha);
       const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
       label = '${dias[dt.weekday - 1]} ${dt.day}';
-    } catch (_) {}
+    } catch (_) {
+      // Si falla el parse, mostrar la fecha raw
+    }
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: DashboardSpacing.md,

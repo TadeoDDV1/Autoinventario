@@ -141,15 +141,62 @@ class ProductoCard extends StatelessWidget {
                         ),
                       ),
                     ],
-                    if (producto.codigoBarras != null) ...[
+                    if (producto.codigoBarras != null ||
+                        producto.marca != null ||
+                        producto.ubicacion != null) ...[
                       Padding(
                         padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
-                        child: Text(
-                          producto.codigoBarras!,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            fontFamily: 'monospace',
-                          ),
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            if (producto.marca != null)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.secondaryContainer
+                                      .withValues(alpha: 0.5),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  producto.marca!,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: theme.colorScheme.onSecondaryContainer,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            if (producto.ubicacion != null)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.place_outlined,
+                                    size: 12,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    producto.ubicacion!,
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            if (producto.codigoBarras != null)
+                              Text(
+                                producto.codigoBarras!,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ],
@@ -169,7 +216,16 @@ class ProductoCard extends StatelessWidget {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              const SizedBox(height: 2),
+                              if (producto.precioMayoreo != null) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Mayoreo: ${money.format(producto.precioMayoreo!)}',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 4),
                               Row(
                                 children: [
                                   Icon(
@@ -179,7 +235,7 @@ class ProductoCard extends StatelessWidget {
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    '${producto.stockActual} uds',
+                                    '${producto.stockActual} ${producto.unidadMedida.value}',
                                     style: theme.textTheme.bodySmall?.copyWith(
                                       color: stockColor,
                                       fontWeight: FontWeight.w500,
@@ -189,22 +245,37 @@ class ProductoCard extends StatelessWidget {
                               ),
                             ],
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: stockColor.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              _stockLabel(producto.stockLevel),
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: stockColor,
-                                fontWeight: FontWeight.w600,
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: stockColor.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  _stockLabel(producto.stockLevel),
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: stockColor,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ),
-                            ),
+                              if (producto.margenPorcentaje != null) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  producto.margenLabel,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: theme.colorScheme.tertiary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ],
                       ),

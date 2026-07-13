@@ -28,7 +28,7 @@ class CacheService {
       await prefs.setString(_productosKey, jsonEncode(data));
       await prefs.setInt(_productosTimeKey, DateTime.now().millisecondsSinceEpoch);
     } catch (e) {
-      debugPrint('CacheService.cacheProductos error: $e');
+      if (kDebugMode) debugPrint('CacheService.cacheProductos error: $e');
     }
   }
 
@@ -43,7 +43,7 @@ class CacheService {
           .map((e) => Producto.fromJson(e as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      debugPrint('CacheService.getProductos error: $e');
+      if (kDebugMode) debugPrint('CacheService.getProductos error: $e');
       return null;
     }
   }

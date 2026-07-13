@@ -23,7 +23,9 @@ class ThemeNotifier extends Notifier<AppThemeMode> {
           orElse: () => AppThemeMode.system,
         );
       }
-    } catch (_) {}
+    } catch (_) {
+      // Si falla la carga de preferencias, usar modo sistema
+    }
   }
 
   Future<void> setMode(AppThemeMode mode) async {
@@ -31,7 +33,9 @@ class ThemeNotifier extends Notifier<AppThemeMode> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_key, mode.name);
-    } catch (_) {}
+    } catch (_) {
+      // Si falla la persistencia del tema, el cambio igual aplica en sesión
+    }
   }
 
   void toggle(BuildContext context) {

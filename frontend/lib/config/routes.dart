@@ -19,6 +19,8 @@ import '../screens/inventario/inventario_screen.dart';
 import '../screens/inventario/predicciones_screen.dart';
 import '../screens/inventario/producto_form_screen.dart';
 import '../screens/inventario/escanear_producto_screen.dart';
+import '../screens/inventario/entrada_screen.dart';
+import '../screens/inventario/historial_entradas_screen.dart';
 import '../widgets/conectividad_badge.dart';
 import '../widgets/stock_alert_banner.dart';
 import '../providers/modo_provider.dart';
@@ -103,6 +105,16 @@ final routerProvider = Provider<GoRouter>((ref) {
                   final id = int.parse(state.pathParameters['id']!);
                   return ProductoFormScreen(productoId: id);
                 },
+              ),
+              GoRoute(
+                path: 'entrada',
+                parentNavigatorKey: _rootNavigatorKey,
+                builder: (context, state) => const EntradaScreen(),
+              ),
+              GoRoute(
+                path: 'entradas',
+                parentNavigatorKey: _rootNavigatorKey,
+                builder: (context, state) => const HistorialEntradasScreen(),
               ),
             ],
           ),

@@ -7,6 +7,9 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/format/money.dart';
+import '../../core/theme/glass_tokens.dart';
+import '../../core/widgets/atmospheric_background.dart';
+import '../../core/widgets/glass_container.dart';
 import '../../providers/producto_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/chat_ejecutivo_service.dart' show ChatEjecutivoService, SugerenciaProducto;
@@ -121,7 +124,9 @@ class _EscanearProductoScreenState extends ConsumerState<EscanearProductoScreen>
     _scannerDisposed = true;
     try {
       _scannerController.stop();
-    } catch (_) {}
+    } catch (_) {
+      // El scanner pudo no haberse inicializado aún
+    }
     _scannerController.dispose();
     _codigoController.dispose();
     _nombreController.dispose();
@@ -148,7 +153,9 @@ class _EscanearProductoScreenState extends ConsumerState<EscanearProductoScreen>
     HapticFeedback.lightImpact();
     try {
       _scannerController.stop();
-    } catch (_) {}
+    } catch (_) {
+      // El scanner pudo no haberse inicializado aún
+    }
     _codigoController.text = value;
     _procesarCodigo(value);
   }
@@ -280,7 +287,9 @@ class _EscanearProductoScreenState extends ConsumerState<EscanearProductoScreen>
     });
     try {
       _scannerController.start();
-    } catch (_) {}
+    } catch (_) {
+      // El scanner pudo no haberse inicializado aún
+    }
   }
 
   @override
@@ -293,12 +302,17 @@ class _EscanearProductoScreenState extends ConsumerState<EscanearProductoScreen>
           onPressed: () => context.go('/inventario'),
         ),
       ),
-      body: switch (_step) {
-        _Step.escanear => _buildEscanearStep(),
-        _Step.autocompletar => _buildAutocompletarStep(),
-        _Step.exito => _buildExitoStep(),
-        _Step.confirmar => _buildAutocompletarStep(), // alias
-      },
+      body: Stack(
+        children: [
+          const AtmosphericBackground(),
+          switch (_step) {
+            _Step.escanear => _buildEscanearStep(),
+            _Step.autocompletar => _buildAutocompletarStep(),
+            _Step.exito => _buildExitoStep(),
+            _Step.confirmar => _buildAutocompletarStep(),
+          },
+        ],
+      ),
     );
   }
 
@@ -366,18 +380,10 @@ class _EscanearProductoScreenState extends ConsumerState<EscanearProductoScreen>
               ),
             ),
           ),
-        Container(
+        GlassContainer(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 6,
-                offset: const Offset(0, -2),
-              ),
-            ],
-          ),
+          borderRadius: 0,
+          blur: GlassTokens.blurSmall,
           child: Column(
             children: [
               TextField(
@@ -422,12 +428,10 @@ class _EscanearProductoScreenState extends ConsumerState<EscanearProductoScreen>
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // Header con código
-                Container(
+                GlassContainer(
                   padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                  borderRadius: GlassTokens.borderRadiusSmall,
+                  blur: GlassTokens.blurSmall,
                   child: Row(
                     children: [
                       const Icon(Icons.qr_code),
@@ -571,7 +575,9 @@ class _EscanearProductoScreenState extends ConsumerState<EscanearProductoScreen>
                                   _step = _Step.escanear;
                                   try {
                                     _scannerController.start();
-                                  } catch (_) {}
+                                  } catch (_) {
+                                    // El scanner pudo no haberse inicializado aún
+                                  }
                                 }),
                         icon: const Icon(Icons.arrow_back),
                         label: const Text('Re-escanear'),
@@ -605,30 +611,23 @@ class _EscanearProductoScreenState extends ConsumerState<EscanearProductoScreen>
 
   Widget _buildSugerenciasIA() {
     final sug = _sugerencia!;
-    return Container(
+    final theme = Theme.of(context);
+    return GlassContainer(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Theme.of(context).colorScheme.tertiaryContainer.withValues(alpha: 0.5),
-            Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.3)),
-      ),
+      borderRadius: GlassTokens.borderRadiusMedium,
+      blur: GlassTokens.blurSmall,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.auto_awesome, size: 18, color: Theme.of(context).colorScheme.tertiary),
+              Icon(Icons.auto_awesome, size: 18, color: theme.colorScheme.tertiary),
               const SizedBox(width: 8),
               Text(
                 'Sugerencias IA',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.onTertiaryContainer,
+                  color: theme.colorScheme.onTertiaryContainer,
                 ),
               ),
             ],
@@ -656,7 +655,7 @@ class _EscanearProductoScreenState extends ConsumerState<EscanearProductoScreen>
             'Fuente: ${sug.fuente}',
             style: TextStyle(
               fontSize: 11,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              color: theme.colorScheme.onSurfaceVariant,
               fontStyle: FontStyle.italic,
             ),
           ),
@@ -674,13 +673,12 @@ class _EscanearProductoScreenState extends ConsumerState<EscanearProductoScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
+            GlassContainer(
               width: 80,
               height: 80,
-              decoration: BoxDecoration(
-                color: Colors.green.shade100,
-                shape: BoxShape.circle,
-              ),
+              blur: GlassTokens.blurSmall,
+              borderRadius: 40,
+              borderColor: Colors.green.withValues(alpha: 0.3),
               child: Icon(Icons.check, size: 50, color: Colors.green.shade700),
             ),
             const SizedBox(height: 24),

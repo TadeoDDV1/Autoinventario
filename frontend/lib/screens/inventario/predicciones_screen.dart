@@ -4,6 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/format/money.dart';
+import '../../core/theme/glass_tokens.dart';
+import '../../core/widgets/atmospheric_background.dart';
+import '../../core/widgets/glass_container.dart';
 import '../../models/sugerencia.dart';
 import '../../providers/ia_provider.dart';
 
@@ -18,37 +21,42 @@ class PrediccionesScreen extends ConsumerWidget {
     final prediccionesAsync = ref.watch(prediccionesInventarioProvider);
     final formatter = money;
 
-    return RefreshIndicator(
-      onRefresh: () async => ref.invalidate(prediccionesInventarioProvider),
-      child: prediccionesAsync.when(
-        data: (resumen) => _buildContent(context, ref, theme, resumen, formatter),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.cloud_off,
-                    size: 64, color: theme.colorScheme.outline),
-                const SizedBox(height: 16),
-                Text('No se pudo analizar el inventario',
-                    style: theme.textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Text('$e',
-                    style: theme.textTheme.bodySmall,
-                    textAlign: TextAlign.center),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: () => ref.invalidate(prediccionesInventarioProvider),
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Reintentar'),
+    return Stack(
+      children: [
+        const AtmosphericBackground(),
+        RefreshIndicator(
+          onRefresh: () async => ref.invalidate(prediccionesInventarioProvider),
+          child: prediccionesAsync.when(
+            data: (resumen) => _buildContent(context, ref, theme, resumen, formatter),
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.cloud_off,
+                        size: 64, color: theme.colorScheme.outline),
+                    const SizedBox(height: 16),
+                    Text('No se pudo analizar el inventario',
+                        style: theme.textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    Text('$e',
+                        style: theme.textTheme.bodySmall,
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: () => ref.invalidate(prediccionesInventarioProvider),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Reintentar'),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
-      ),
+      ],
     );
   }
 
@@ -104,19 +112,10 @@ class PrediccionesScreen extends ConsumerWidget {
 
         // Recomendaciones IA (caja destacada)
         if (resumen.recomendaciones.isNotEmpty) ...[
-          Container(
+          GlassContainer(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  theme.colorScheme.primaryContainer,
-                  theme.colorScheme.tertiaryContainer,
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(14),
-            ),
+            borderRadius: GlassTokens.borderRadiusMedium,
+            blur: GlassTokens.blurSmall,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -205,19 +204,13 @@ class PrediccionesScreen extends ConsumerWidget {
         const SizedBox(height: 16),
 
         // Valor en riesgo
-        Container(
+        GlassContainer(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: resumen.valorCritico > 0
-                ? Colors.red.shade50
-                : theme.colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: resumen.valorCritico > 0
-                  ? Colors.red.shade200
-                  : theme.colorScheme.outlineVariant,
-            ),
-          ),
+          borderRadius: GlassTokens.borderRadiusMedium,
+          blur: GlassTokens.blurSmall,
+          color: resumen.valorCritico > 0
+              ? Colors.red.withValues(alpha: 0.1)
+              : null,
           child: Row(
             children: [
               Icon(
@@ -329,18 +322,15 @@ class _MetricaCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Material(
-      color: theme.colorScheme.surface,
-      borderRadius: BorderRadius.circular(12),
+    return GlassContainer(
+      borderRadius: GlassTokens.borderRadiusMedium,
+      blur: GlassTokens.blurSmall,
+      borderColor: color.withValues(alpha: 0.3),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
+        borderRadius: BorderRadius.circular(GlassTokens.borderRadiusMedium),
+        child: Padding(
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color.withValues(alpha: 0.3)),
-          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -438,29 +428,25 @@ class _PrediccionCard extends StatelessWidget {
     final color = _urgencyColor();
     final icon = _urgencyIcon();
 
-    return Card(
+    return GlassContainer(
       margin: const EdgeInsets.only(bottom: 10),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: color.withValues(alpha: 0.3), width: 1.5),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(icon, color: color, size: 22),
-                ),
-                const SizedBox(width: 12),
+      padding: const EdgeInsets.all(14),
+      borderRadius: GlassTokens.borderRadiusMedium,
+      blur: GlassTokens.blurSmall,
+      borderColor: color.withValues(alpha: 0.3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              GlassContainer(
+                padding: const EdgeInsets.all(8),
+                borderRadius: GlassTokens.borderRadiusSmall,
+                blur: GlassTokens.blurSmall,
+                color: color.withValues(alpha: 0.15),
+                child: Icon(icon, color: color, size: 22),
+              ),
+              const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -537,12 +523,11 @@ class _PrediccionCard extends StatelessWidget {
             const SizedBox(height: 10),
 
             // Razón principal
-            Container(
+            GlassContainer(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(6),
-              ),
+              borderRadius: GlassTokens.borderRadiusSmall,
+              blur: GlassTokens.blurSmall,
+              color: color.withValues(alpha: 0.08),
               child: Row(
                 children: [
                   Icon(Icons.lightbulb_outline, size: 16, color: color),
@@ -563,13 +548,11 @@ class _PrediccionCard extends StatelessWidget {
             // Sugerencia de reorden
             if (prediccion.cantidadSugerida > 0) ...[
               const SizedBox(height: 10),
-              Container(
+              GlassContainer(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.shade200),
-                ),
+                borderRadius: GlassTokens.borderRadiusSmall,
+                blur: GlassTokens.blurSmall,
+                color: Colors.blue.withValues(alpha: 0.1),
                 child: Row(
                   children: [
                     Icon(Icons.shopping_cart, color: Colors.blue.shade700),
@@ -597,8 +580,7 @@ class _PrediccionCard extends StatelessWidget {
             ],
           ],
         ),
-      ),
-    );
+      );
   }
 }
 
@@ -664,13 +646,11 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
+    return GlassContainer(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.green.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.green.shade200),
-      ),
+      borderRadius: GlassTokens.borderRadiusMedium,
+      blur: GlassTokens.blurSmall,
+      color: Colors.green.withValues(alpha: 0.1),
       child: Column(
         children: [
           Icon(icon, size: 48, color: Colors.green.shade600),

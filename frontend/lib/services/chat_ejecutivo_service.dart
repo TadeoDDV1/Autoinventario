@@ -244,7 +244,9 @@ class ChatEjecutivoService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_historialKey);
-    } catch (_) {}
+    } catch (_) {
+      // Silenciar errores de persistencia del historial
+    }
   }
 
   // ── Sesión activa (la conversación en curso, NO el historial completo) ──

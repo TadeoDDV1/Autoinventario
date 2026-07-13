@@ -93,7 +93,9 @@ class EventSourceClient {
             try {
               final data = jsonDecode(dataStr) as Map<String, dynamic>;
               _controller?.add(SSEEvent(type: currentEvent, data: data));
-            } catch (_) {}
+            } catch (_) {
+              // Línea SSE sin JSON válido (evento keep-alive u otro formato)
+            }
           }
           currentEvent = 'message';
         }

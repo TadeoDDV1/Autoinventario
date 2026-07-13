@@ -242,6 +242,8 @@ func respondError(c *gin.Context, err error, defaultStatus int, defaultCode, def
 		c.JSON(http.StatusConflict, models.APIError{Error: "STOCK_INSUFICIENTE", Message: err.Error()})
 	case errors.Is(err, apperrors.ErrIDInvalido):
 		c.JSON(http.StatusBadRequest, models.APIError{Error: "BAD_REQUEST", Message: err.Error()})
+	case errors.Is(err, apperrors.ErrSKUExiste):
+		c.JSON(http.StatusConflict, models.APIError{Error: "SKU_DUPLICADO", Message: err.Error()})
 	default:
 		c.JSON(defaultStatus, models.APIError{Error: defaultCode, Message: defaultMessage})
 	}

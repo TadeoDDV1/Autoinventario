@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/theme/glass_tokens.dart';
+import '../../core/widgets/atmospheric_background.dart';
+import '../../core/widgets/glass_container.dart';
 import '../../providers/venta_provider.dart';
 import '../../services/chat_ejecutivo_service.dart';
 import '../../widgets/chat/burbuja_asistente.dart';
@@ -277,103 +280,107 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
         ],
       ),
-      body: Focus(
-        autofocus: true,
-        onKeyEvent: _onKey,
-        child: Column(
-          children: [
-            // Quick prompts (sólo al inicio, cuando sólo hay el mensaje de bienvenida)
-            if (_mensajes.length <= 1) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: _quickPrompts
-                      .map((p) => ActionChip(
-                            label: Text(p, style: const TextStyle(fontSize: 12)),
-                            onPressed: () => _usarQuickPrompt(p),
-                            backgroundColor: theme.colorScheme.primaryContainer,
-                          ))
-                      .toList(),
-                ),
-              ),
-            ],
-
-            Expanded(
-              child: ListView.builder(
-                controller: _scroll,
-                padding: const EdgeInsets.all(12),
-                itemCount: _mensajes.length,
-                itemBuilder: (ctx, i) {
-                  final msg = _mensajes[i];
-                  if (msg.esUsuario) {
-                    return _BurbujaUsuario(texto: msg.texto);
-                  }
-                  // Es respuesta del asistente: la nueva BurbujaAsistente.
-                  // índice de respuesta = i ~/ 2 (los pares usuario+asistente).
-                  final respuesta = _respuestas.elementAtOrNull(i ~/ 2);
-                  final esUltima = i == _mensajes.length - 1;
-                  return BurbujaAsistente(
-                    mensaje: msg,
-                    respuesta: respuesta,
-                    onRehacer: _ultimoMensajeUsuario == null
-                        ? null
-                        : () => _enviar(_ultimoMensajeUsuario),
-                    esUltima: esUltima,
-                  );
-                },
-              ),
-            ),
-            // Esqueleto "escribiendo…" (reemplaza al viejo _PensandoDots inferior)
-            if (_cargando) const BurbujaEscribiendo(),
-
-            Container(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                border: Border(
-                  top: BorderSide(color: theme.colorScheme.outlineVariant),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _input,
-                      focusNode: _inputFocus,
-                      onSubmitted: (_) => _enviar(),
-                      decoration: InputDecoration(
-                        hintText: 'Pregúntame algo…  (Ctrl+Enter)',
-                        filled: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                      ),
-                      textInputAction: TextInputAction.send,
-                      maxLines: null,
-                      textCapitalization: TextCapitalization.sentences,
+      body: Stack(
+        children: [
+          const AtmosphericBackground(),
+          Focus(
+            autofocus: true,
+            onKeyEvent: _onKey,
+            child: Column(
+              children: [
+                // Quick prompts (sólo al inicio, cuando sólo hay el mensaje de bienvenida)
+                if (_mensajes.length <= 1) ...[
+                  GlassContainer(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    borderRadius: GlassTokens.borderRadiusSmall,
+                    blur: GlassTokens.blurSmall,
+                    margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: _quickPrompts
+                          .map((p) => ActionChip(
+                                label: Text(p, style: const TextStyle(fontSize: 12)),
+                                onPressed: () => _usarQuickPrompt(p),
+                                backgroundColor: theme.colorScheme.primaryContainer,
+                              ))
+                          .toList(),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: _cargando ? null : _enviar,
-                    style: FilledButton.styleFrom(
-                      shape: const CircleBorder(),
-                      padding: const EdgeInsets.all(16),
-                    ),
-                    child: const Icon(Icons.send),
                   ),
                 ],
-              ),
+
+                Expanded(
+                  child: ListView.builder(
+                    controller: _scroll,
+                    padding: const EdgeInsets.all(12),
+                    itemCount: _mensajes.length,
+                    itemBuilder: (ctx, i) {
+                      final msg = _mensajes[i];
+                      if (msg.esUsuario) {
+                        return _BurbujaUsuario(texto: msg.texto);
+                      }
+                      // Es respuesta del asistente: la nueva BurbujaAsistente.
+                      // índice de respuesta = i ~/ 2 (los pares usuario+asistente).
+                      final respuesta = _respuestas.elementAtOrNull(i ~/ 2);
+                      final esUltima = i == _mensajes.length - 1;
+                      return BurbujaAsistente(
+                        mensaje: msg,
+                        respuesta: respuesta,
+                        onRehacer: _ultimoMensajeUsuario == null
+                            ? null
+                            : () => _enviar(_ultimoMensajeUsuario),
+                        esUltima: esUltima,
+                      );
+                    },
+                  ),
+                ),
+                // Esqueleto "escribiendo…"
+                if (_cargando) const BurbujaEscribiendo(),
+
+                GlassContainer(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                  borderRadius: 0,
+                  blur: GlassTokens.blurSmall,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _input,
+                          focusNode: _inputFocus,
+                          onSubmitted: (_) => _enviar(),
+                          decoration: InputDecoration(
+                            hintText: 'Pregúntame algo…  (Ctrl+Enter)',
+                            filled: true,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                          ),
+                          textInputAction: TextInputAction.send,
+                          maxLines: null,
+                          textCapitalization: TextCapitalization.sentences,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        onPressed: _cargando ? null : _enviar,
+                        style: FilledButton.styleFrom(
+                          shape: const CircleBorder(),
+                          padding: const EdgeInsets.all(16),
+                        ),
+                        child: const Icon(Icons.send),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ferreteria/backend/internal/apperrors"
@@ -77,6 +78,45 @@ func (r *EntradaRepository) GetAll(page, pageSize int) ([]models.EntradaInventar
 	entradas := make([]models.EntradaInventario, 0)
 	query := `SELECT * FROM entradas_inventario ORDER BY fecha DESC LIMIT ? OFFSET ?`
 	if err := r.db.Select(&entradas, query, pageSize, offset); err != nil {
+		return nil, 0, err
+	}
+
+	return entradas, total, nil
+}
+
+// GetByDateRange devuelve entradas dentro de [desde, hasta] (inclusive en el día hasta).
+// Si desde o hasta son zero, se omite ese límite.
+func (r *EntradaRepository) GetByDateRange(desde, hasta time.Time, page, pageSize int) ([]models.EntradaInventario, int64, error) {
+	var conditions []string
+	var args []interface{}
+
+	if !desde.IsZero() {
+		conditions = append(conditions, "fecha >= ?")
+		args = append(args, desde)
+	}
+	if !hasta.IsZero() {
+		// fin del día
+		endOfDay := time.Date(hasta.Year(), hasta.Month(), hasta.Day(), 23, 59, 59, 0, hasta.Location())
+		conditions = append(conditions, "fecha <= ?")
+		args = append(args, endOfDay)
+	}
+
+	whereClause := ""
+	if len(conditions) > 0 {
+		whereClause = "WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	var total int64
+	countQuery := "SELECT COUNT(*) FROM entradas_inventario " + whereClause
+	if err := r.db.Get(&total, countQuery, args...); err != nil {
+		return nil, 0, err
+	}
+
+	offset := (page - 1) * pageSize
+	entradas := make([]models.EntradaInventario, 0)
+	query := `SELECT * FROM entradas_inventario ` + whereClause + ` ORDER BY fecha DESC LIMIT ? OFFSET ?`
+	args = append(args, pageSize, offset)
+	if err := r.db.Select(&entradas, query, args...); err != nil {
 		return nil, 0, err
 	}
 

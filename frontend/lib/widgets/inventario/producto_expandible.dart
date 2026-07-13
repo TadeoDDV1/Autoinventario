@@ -1,8 +1,31 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/glass_tokens.dart';
-import '../../core/widgets/glass_container.dart';
 import '../../models/producto.dart';
 import 'conocimiento_ferreteria.dart';
+
+Widget _detailChip(ThemeData theme, IconData icon, String label) {
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+      borderRadius: BorderRadius.circular(GlassTokens.borderRadiusSmall),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    ),
+  );
+}
 
 class ProductoExpandible extends StatefulWidget {
   final Producto producto;
@@ -94,6 +117,26 @@ class _ProductoExpandibleState extends State<ProductoExpandible> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (p.marca != null ||
+                  p.ubicacion != null ||
+                  p.sku != null) ...[
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    if (p.marca != null)
+                      _detailChip(theme, Icons.business_center_outlined,
+                          'Marca: ${p.marca}'),
+                    if (p.ubicacion != null)
+                      _detailChip(theme, Icons.place_outlined,
+                          'Ubicación: ${p.ubicacion}'),
+                    if (p.sku != null)
+                      _detailChip(theme, Icons.qr_code_2, 'SKU: ${p.sku}'),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ],
               if (descBD || conocimiento != null) ...[
                 const SizedBox(height: 4),
                 Text(

@@ -1,6 +1,10 @@
 package service
 
 import (
+	"errors"
+	"strings"
+
+	"github.com/ferreteria/backend/internal/apperrors"
 	"github.com/ferreteria/backend/internal/models"
 	"github.com/ferreteria/backend/internal/repository"
 )
@@ -28,11 +32,45 @@ func (s *ProductoService) GetByID(id int) (*models.Producto, error) {
 }
 
 func (s *ProductoService) Create(p *models.ProductoCreate) (int64, error) {
+	if p.SKU != nil {
+		trimmed := strings.TrimSpace(*p.SKU)
+		if trimmed != "" {
+			exists, err := s.repo.SKUExists(trimmed, 0)
+			if err != nil {
+				return 0, err
+			}
+			if exists {
+				return 0, apperrors.ErrSKUExiste
+			}
+			p.SKU = &trimmed
+		} else {
+			p.SKU = nil
+		}
+	}
 	return s.repo.Create(p)
 }
 
 func (s *ProductoService) Update(id int, p *models.ProductoUpdate) error {
-	return s.repo.Update(id, p)
+	if p.SKU != nil {
+		trimmed := strings.TrimSpace(*p.SKU)
+		if trimmed != "" {
+			exists, err := s.repo.SKUExists(trimmed, id)
+			if err != nil {
+				return err
+			}
+			if exists {
+				return apperrors.ErrSKUExiste
+			}
+			p.SKU = &trimmed
+		} else {
+			p.SKU = nil
+		}
+	}
+	err := s.repo.Update(id, p)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *ProductoService) Delete(id int) error {
@@ -54,3 +92,7 @@ func (s *ProductoService) BuscarPorCodigo(codigo string) (*models.Producto, erro
 func (s *ProductoService) AjustarStock(id int, cantidad int) error {
 	return s.repo.AjustarStock(id, cantidad)
 }
+
+// Compile-time guard: referenciar errors evita imports no usados si en el
+// futuro se agregan más tipos de error a la validación.
+var _ = errors.Is

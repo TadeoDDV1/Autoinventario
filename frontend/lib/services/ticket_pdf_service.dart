@@ -36,7 +36,7 @@ class TicketPdfService {
         'ticket_${venta.folio ?? venta.id ?? DateTime.now().millisecondsSinceEpoch}.pdf';
     final file = File('${dir.path}/$filename');
     await file.writeAsBytes(bytes);
-    debugPrint('TicketPdfService: guardado en ${file.path}');
+    if (kDebugMode) debugPrint('TicketPdfService: guardado en ${file.path}');
     return file;
   }
 
