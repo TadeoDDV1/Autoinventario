@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
 
 /// IP del backend en la red local.
-/// El celular real NO puede usar 10.0.2.2 (eso es solo para emulador AVD).
-/// Cambia esto si tu compu tiene otra IP en la red.
+/// - Emulador AVD:  usa 10.0.2.2 (default) → mapea a localhost del host.
+/// - Celular real:  pasa `--dart-define=BACKEND_HOST=<IP-LAN>` al compilar.
+///   Ej: `flutter run --dart-define=BACKEND_HOST=192.168.1.81`.
+///   El script `dev.sh` lo hace automáticamente.
 const String _backendHost = String.fromEnvironment(
   'BACKEND_HOST',
   defaultValue: '10.0.2.2',

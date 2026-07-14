@@ -48,6 +48,31 @@ class IaService {
     }
   }
 
+  Future<List<VentaHora>> getVentasHoyPorHora() async {
+    try {
+      final response = await _dio.get('/dashboard/ventas-hoy');
+      final list = response.data as List<dynamic>;
+      return list
+          .map((e) => VentaHora.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
+  Future<List<VentaReciente>> getVentasRecientes({int limit = 5}) async {
+    try {
+      final response = await _dio.get('/dashboard/recientes',
+          queryParameters: {'limit': limit});
+      final list = response.data as List<dynamic>;
+      return list
+          .map((e) => VentaReciente.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
   Future<PrediccionesResumen> getPrediccionesInventario() async {
     try {
       final response = await _dio.get('/ia/inventario/predicciones');

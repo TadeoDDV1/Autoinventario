@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/constants/durations.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/format/money.dart';
@@ -8,9 +9,8 @@ import '../../core/theme/glass_tokens.dart';
 import '../../core/widgets/glass_container.dart';
 import '../../models/venta.dart';
 import '../../providers/producto_provider.dart';
+import '../../providers/ia_provider.dart';
 import '../../providers/venta_provider.dart';
-
-enum CartPanelState { cart, completado }
 
 class QuickCartSummary extends ConsumerStatefulWidget {
   final VoidCallback onLimpiar;
@@ -25,11 +25,9 @@ class QuickCartSummary extends ConsumerStatefulWidget {
 }
 
 class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
-  CartPanelState _panelState = CartPanelState.cart;
   final _montoController = TextEditingController();
   final _montoFocusNode = FocusNode();
   MetodoPago _metodoPago = MetodoPago.efectivo;
-  Venta? _ultimaVenta;
   bool _procesando = false;
 
   double get _montoRecibido => double.tryParse(_montoController.text) ?? 0.0;
@@ -41,7 +39,6 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
     super.dispose();
   }
 
-  /// Determina si el botón COBRAR debe estar habilitado
   bool get _puedeCobrar {
     if (_procesando) return false;
     final carrito = ref.read(carritoProvider);
@@ -79,12 +76,6 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
 
     setState(() => _procesando = true);
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const _LoadingDialog(),
-    );
-
     try {
       final api = ref.read(apiServiceProvider);
       final response = await api.createVenta({
@@ -98,65 +89,33 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
         'cambio': cambio,
       });
 
-      final ventaPersistida = Venta(
-        id: response['id'] as int?,
-        folio: response['folio'] as String?,
-        detalles: carrito
-            .map((item) => DetalleVenta(
-                  productoId: item.producto.id,
-                  nombreProducto: item.producto.nombre,
-                  precioUnitario: item.producto.precioVenta,
-                  cantidad: item.cantidad,
-                  subtotal: item.subtotal,
-                ))
-            .toList(),
-        subtotal: subtotal,
-        iva: iva,
-        total: total,
-        metodoPago: _metodoPago.value,
-        montoRecibido:
-            _metodoPago == MetodoPago.efectivo ? _montoRecibido : null,
-        cambio: cambio,
-        fecha: DateTime.now(),
-      );
+      final ventaId = (response['id'] as num?)?.toInt();
+      final folio = response['folio'] as String? ?? '—';
 
       ref.read(carritoProvider.notifier).vaciar();
       ref.invalidate(productosProvider);
+      ref.invalidate(dashboardProvider);
+      ref.invalidate(ventasHoyPorHoraProvider);
+      ref.invalidate(ventasRecientesProvider);
 
-      if (mounted) {
-        Navigator.of(context).pop();
-        setState(() {
-          _ultimaVenta = ventaPersistida;
-          _panelState = CartPanelState.completado;
-          _montoController.clear();
-        });
-      }
+      if (!mounted) return;
+
+      _montoController.clear();
+      _mostrarSnackExito(
+        folio: folio,
+        cambio: cambio,
+        ventaId: ventaId,
+      );
     } on ApiException catch (e) {
       if (mounted) {
-        Navigator.of(context).pop();
         final msg = e.isStockInsuficiente
             ? 'Stock insuficiente para uno de los productos'
             : 'Error al registrar venta: ${e.message}';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(msg),
-            backgroundColor: Colors.red.shade700,
-            duration: AppDurations.snackbarLong,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _mostrarSnackError(msg);
       }
     } catch (e) {
       if (mounted) {
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al registrar venta: $e'),
-            backgroundColor: Colors.red.shade700,
-            duration: AppDurations.snackbarLong,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _mostrarSnackError('Error al registrar venta: $e');
       }
     } finally {
       if (mounted) {
@@ -165,13 +124,66 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
     }
   }
 
-  void _onNuevaVenta() {
-    setState(() {
-      _panelState = CartPanelState.cart;
-      _ultimaVenta = null;
-      _metodoPago = MetodoPago.efectivo;
-      _montoController.clear();
-    });
+  void _mostrarSnackExito({
+    required String folio,
+    double? cambio,
+    int? ventaId,
+  }) {
+    final cambiaTxt = (cambio != null && cambio > 0)
+        ? ' · Cambio ${money.format(cambio)}'
+        : '';
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.white, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Venta registrada · Folio $folio$cambiaTxt',
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.green.shade700,
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        action: (ventaId != null)
+            ? SnackBarAction(
+                label: 'Ver ticket',
+                textColor: Colors.white,
+                onPressed: () => context.push('/ticket/$ventaId'),
+              )
+            : null,
+      ),
+    );
+  }
+
+  void _mostrarSnackError(String mensaje) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                mensaje,
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.red.shade700,
+        duration: AppDurations.snackbarLong,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   /// Abre un bottom-sheet con el flujo de cobro rápido disparado por Ctrl+P.
@@ -250,17 +262,13 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
           offset: const Offset(0, -2),
         ),
       ],
-      // Only top corners are rounded; bottom edge is flush with screen bottom
       customDecoration: BoxDecoration(
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(GlassTokens.borderRadiusLarge),
           topRight: Radius.circular(GlassTokens.borderRadiusLarge),
         ),
       ),
-      child: switch (_panelState) {
-        CartPanelState.cart => _buildCartView(theme),
-        CartPanelState.completado => _buildCompletadoView(theme),
-      },
+      child: _buildCartView(theme),
     );
   }
 
@@ -725,155 +733,6 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCompletadoView(ThemeData theme) {
-    final formatter = money;
-    final venta = _ultimaVenta!;
-
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.green.shade50,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.green.shade200),
-            ),
-            child: Column(
-              children: [
-                Icon(
-                  Icons.check_circle,
-                  size: 64,
-                  color: Colors.green.shade700,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  '¡Venta registrada!',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green.shade700,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Folio: ${venta.folio ?? "N/A"}',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.green.shade700,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Guardada en el sistema ✓',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: Colors.green.shade600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          _buildTicketRow('Subtotal', formatter.format(venta.subtotal), theme),
-          const SizedBox(height: 4),
-          _buildTicketRow('IVA', formatter.format(venta.iva), theme),
-          const SizedBox(height: 8),
-          _buildTicketRow(
-            'TOTAL',
-            formatter.format(venta.total),
-            theme,
-            bold: true,
-            color: theme.colorScheme.primary,
-          ),
-          const SizedBox(height: 8),
-          _buildTicketRow(
-            'Método',
-            MetodoPago.fromString(venta.metodoPago).label,
-            theme,
-          ),
-          if (venta.montoRecibido != null) ...[
-            const SizedBox(height: 4),
-            _buildTicketRow(
-              'Recibido',
-              formatter.format(venta.montoRecibido!),
-              theme,
-            ),
-            const SizedBox(height: 4),
-            _buildTicketRow(
-              'Cambio',
-              formatter.format(venta.cambio ?? 0),
-              theme,
-              color: Colors.green.shade700,
-              bold: true,
-            ),
-          ],
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: FilledButton.icon(
-              onPressed: _onNuevaVenta,
-              icon: const Icon(Icons.add),
-              label: const Text('Nueva Venta'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTicketRow(String label, String value, ThemeData theme,
-      {bool bold = false, Color? color}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: bold
-              ? theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)
-              : theme.textTheme.bodyMedium,
-        ),
-        Text(
-          value,
-          style: bold
-              ? theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: color ?? theme.colorScheme.onSurface,
-                )
-              : theme.textTheme.bodyMedium?.copyWith(
-                  color: color ?? theme.colorScheme.onSurface,
-                ),
-        ),
-      ],
-    );
-  }
-}
-
-class _LoadingDialog extends StatelessWidget {
-  const _LoadingDialog();
-
-  @override
-  Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      child: AlertDialog(
-        content: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(strokeWidth: 3),
-            ),
-            SizedBox(width: 20),
-            Text('Procesando venta...'),
-          ],
         ),
       ),
     );

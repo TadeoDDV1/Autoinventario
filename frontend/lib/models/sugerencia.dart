@@ -269,6 +269,57 @@ class StockBajoItem {
   }
 }
 
+class VentaHora {
+  final int hora;
+  final double totalVentas;
+  final int transacciones;
+
+  const VentaHora({
+    required this.hora,
+    required this.totalVentas,
+    required this.transacciones,
+  });
+
+  factory VentaHora.fromJson(Map<String, dynamic> json) {
+    return VentaHora(
+      hora: (json['hora'] as num?)?.toInt() ?? 0,
+      totalVentas: (json['total_ventas'] as num?)?.toDouble() ?? 0,
+      transacciones: (json['transacciones'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class VentaReciente {
+  final int id;
+  final String folio;
+  final double total;
+  final String metodoPago;
+  final DateTime fecha;
+  final int numProductos;
+
+  const VentaReciente({
+    required this.id,
+    required this.folio,
+    required this.total,
+    required this.metodoPago,
+    required this.fecha,
+    required this.numProductos,
+  });
+
+  factory VentaReciente.fromJson(Map<String, dynamic> json) {
+    return VentaReciente(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      folio: json['folio'] as String? ?? '',
+      total: (json['total'] as num?)?.toDouble() ?? 0,
+      metodoPago: json['metodo_pago'] as String? ?? '',
+      fecha: json['fecha'] != null
+          ? DateTime.parse(json['fecha'] as String)
+          : DateTime.now(),
+      numProductos: (json['num_productos'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
 class VentasDia {
   final String fecha;
   final double totalVentas;

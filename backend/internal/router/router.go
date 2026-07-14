@@ -89,6 +89,8 @@ func SetupRouter(
 		}
 
 		api.GET("/dashboard/resumen", iaHandler.GetDashboard)
+		api.GET("/dashboard/ventas-hoy", iaHandler.GetDashboardVentasHoy)
+		api.GET("/dashboard/recientes", iaHandler.GetDashboardRecientes)
 
 		api.POST("/sync/ventas", syncHandler.SyncVentas)
 

@@ -176,7 +176,6 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final productosAsync = ref.watch(productosProvider);
-    final carritoCantidad = ref.watch(carritoCantidadProvider);
 
     return Shortcuts(
       shortcuts: <ShortcutActivator, Intent>{
@@ -254,7 +253,7 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
         child: Focus(
           focusNode: _shortcutFocus,
           autofocus: true,
-          child: _buildScaffold(theme, productosAsync, carritoCantidad),
+          child: _buildScaffold(theme, productosAsync),
         ),
       ),
     );
@@ -263,7 +262,6 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
   Widget _buildScaffold(
     ThemeData theme,
     AsyncValue productosAsync,
-    int carritoCantidad,
   ) {
     final posicion = ref.watch(burbujaPosicionProvider);
     return Scaffold(
@@ -351,12 +349,11 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
                               productosAsync,
                             ),
                           ),
-                          if (carritoCantidad > 0)
-                            QuickCartSummary(
-                              key: _cartKey,
-                              onLimpiar: () =>
-                                  ref.read(carritoProvider.notifier).vaciar(),
-                            ),
+                          QuickCartSummary(
+                            key: _cartKey,
+                            onLimpiar: () =>
+                                ref.read(carritoProvider.notifier).vaciar(),
+                          ),
                         ],
                       );
                     }

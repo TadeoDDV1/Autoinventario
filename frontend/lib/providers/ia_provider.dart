@@ -38,6 +38,20 @@ final copilotSugerenciasProvider =
   return completer.future;
 });
 
+/// Ventas del día agregadas por hora (24 entradas, 0..23).
+final ventasHoyPorHoraProvider =
+    FutureProvider.autoDispose<List<VentaHora>>((ref) async {
+  final ia = ref.read(iaServiceProvider);
+  return ia.getVentasHoyPorHora();
+});
+
+/// Últimas N ventas del día (default 5).
+final ventasRecientesProvider =
+    FutureProvider.autoDispose<List<VentaReciente>>((ref) async {
+  final ia = ref.read(iaServiceProvider);
+  return ia.getVentasRecientes();
+});
+
 /// Dashboard ejecutivo. Se refresca con `ref.invalidate`.
 final dashboardProvider = FutureProvider.autoDispose<DashboardResumen>((ref) async {
   final ia = ref.read(iaServiceProvider);

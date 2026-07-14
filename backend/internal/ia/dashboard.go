@@ -7,6 +7,23 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+// VentaHora representa las ventas agregadas en una hora específica del día.
+type VentaHora struct {
+	Hora         int     `json:"hora"`
+	TotalVentas  float64 `json:"total_ventas"`
+	Transacciones int    `json:"transacciones"`
+}
+
+// VentaReciente es un resumen ligero de una venta para el dashboard.
+type VentaReciente struct {
+	ID          int       `json:"id"`
+	Folio       string    `json:"folio"`
+	Total       float64   `json:"total"`
+	MetodoPago  string    `json:"metodo_pago"`
+	Fecha       time.Time `json:"fecha"`
+	NumProductos int      `json:"num_productos"`
+}
+
 // DashboardResumen es el payload del nuevo endpoint /api/v1/dashboard/resumen.
 type DashboardResumen struct {
 	Fecha                string             `json:"fecha"`
@@ -160,5 +177,66 @@ func (s *DashboardService) ResumenHoy(ctx context.Context) (*DashboardResumen, e
 		out.VentasUltimos7Dias = append(out.VentasUltimos7Dias, vd)
 	}
 
+	return out, nil
+}
+
+// ResumenHorasHoy devuelve las ventas agregadas por hora (0..23) para el día actual.
+// Las horas sin ventas se rellenan con cero (padding en el backend).
+func (s *DashboardService) ResumenHorasHoy(ctx context.Context) ([]VentaHora, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT HOUR(created_at) as hora, COALESCE(SUM(total), 0), COUNT(*)
+		FROM ventas
+		WHERE DATE(created_at) = CURDATE()
+		GROUP BY HOUR(created_at)
+		ORDER BY hora ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	horaMap := make(map[int]VentaHora, 24)
+	for rows.Next() {
+		var h VentaHora
+		if err := rows.Scan(&h.Hora, &h.TotalVentas, &h.Transacciones); err != nil {
+			return nil, err
+		}
+		horaMap[h.Hora] = h
+	}
+
+	out := make([]VentaHora, 0, 24)
+	for i := 0; i < 24; i++ {
+		if h, ok := horaMap[i]; ok {
+			out = append(out, h)
+		} else {
+			out = append(out, VentaHora{Hora: i})
+		}
+	}
+	return out, nil
+}
+
+// ListRecientesHoy devuelve las últimas N ventas del día actual.
+func (s *DashboardService) ListRecientesHoy(ctx context.Context, limit int) ([]VentaReciente, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT v.id, v.folio, v.total, v.metodo_pago, v.created_at,
+		       (SELECT COUNT(*) FROM detalle_ventas d WHERE d.venta_id = v.id) as num_productos
+		FROM ventas v
+		WHERE DATE(v.created_at) = CURDATE()
+		ORDER BY v.created_at DESC
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]VentaReciente, 0, limit)
+	for rows.Next() {
+		var r VentaReciente
+		if err := rows.Scan(&r.ID, &r.Folio, &r.Total, &r.MetodoPago, &r.Fecha, &r.NumProductos); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
 	return out, nil
 }

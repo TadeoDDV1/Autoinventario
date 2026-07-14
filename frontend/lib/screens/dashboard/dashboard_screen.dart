@@ -20,6 +20,8 @@ import '../../widgets/dashboard/stock_alert_list.dart';
 import '../../widgets/dashboard/top_productos_list.dart';
 import '../../widgets/dashboard/variacion_badge.dart';
 import '../../widgets/dashboard/ventas_chart.dart';
+import '../../widgets/dashboard/ventas_horas_chart.dart';
+import '../../widgets/dashboard/ventas_recientes_list.dart';
 
 /// Dashboard ejecutivo de inicio. Orquestador: compone los widgets
 /// extraídos en `widgets/dashboard/` con un layout responsivo que
@@ -107,6 +109,8 @@ class DashboardScreen extends ConsumerWidget {
                 if (variant == DashboardLayoutVariant.desktop) ...[
                   const SizedBox(height: DashboardSpacing.lg),
                   _buildTopYChartRow(context, ref, resumen),
+                  const SizedBox(height: DashboardSpacing.xl),
+                  _buildHorasYRecientesRow(context, ref),
                 ] else ...[
                   const SizedBox(height: DashboardSpacing.xl),
                   _buildTopProductos(context, ref, resumen),
@@ -114,8 +118,11 @@ class DashboardScreen extends ConsumerWidget {
                   _buildStockAlertas(context, resumen),
                   const SizedBox(height: DashboardSpacing.xl),
                   _buildChart(context, resumen),
+                  const SizedBox(height: DashboardSpacing.xl),
+                  _buildHorasChart(context, ref),
+                  const SizedBox(height: DashboardSpacing.xl),
+                  _buildRecientes(context, ref),
                 ],
-                const SizedBox(height: DashboardSpacing.xl),
               ],
             ),
           ),
@@ -343,6 +350,93 @@ class DashboardScreen extends ConsumerWidget {
       borderRadius: GlassTokens.borderRadiusMedium,
       blur: GlassTokens.blurSmall,
       child: content,
+    );
+  }
+
+  Widget _buildHorasChart(BuildContext context, WidgetRef ref) {
+    final horasAsync = ref.watch(ventasHoyPorHoraProvider);
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SeccionHeader(
+          titulo: 'Ventas por hora (hoy)',
+          icon: Icons.show_chart,
+        ),
+        horasAsync.when(
+          data: (horas) =>
+              horas.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.all(DashboardSpacing.xl),
+                      child: Text('Sin datos de ventas hoy',
+                          style: Theme.of(context).textTheme.bodyMedium),
+                    )
+                  : VentasHorasChart(horas: horas),
+          loading: () => const SizedBox(
+            height: DashboardSizes.chartHeight,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
+          error: (e, _) => Padding(
+            padding: const EdgeInsets.all(DashboardSpacing.md),
+            child: Text('Error al cargar: $e',
+                style: Theme.of(context).textTheme.bodySmall),
+          ),
+        ),
+      ],
+    );
+    return GlassContainer(
+      padding: const EdgeInsets.all(DashboardSpacing.md),
+      borderRadius: GlassTokens.borderRadiusMedium,
+      blur: GlassTokens.blurSmall,
+      child: content,
+    );
+  }
+
+  Widget _buildRecientes(BuildContext context, WidgetRef ref) {
+    final recientesAsync = ref.watch(ventasRecientesProvider);
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SeccionHeader(
+          titulo: 'Últimas ventas',
+          icon: Icons.receipt_long,
+          badgeCount: 5,
+        ),
+        recientesAsync.when(
+          data: (ventas) => VentasRecientesList(ventas: ventas),
+          loading: () => const SizedBox(
+            height: DashboardSizes.rowListHeight * 3,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
+          error: (e, _) => Padding(
+            padding: const EdgeInsets.all(DashboardSpacing.md),
+            child: Text('Error: $e',
+                style: Theme.of(context).textTheme.bodySmall),
+          ),
+        ),
+      ],
+    );
+    return GlassContainer(
+      padding: const EdgeInsets.all(DashboardSpacing.md),
+      borderRadius: GlassTokens.borderRadiusMedium,
+      blur: GlassTokens.blurSmall,
+      child: content,
+    );
+  }
+
+  Widget _buildHorasYRecientesRow(BuildContext context, WidgetRef ref) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 6,
+          child: _buildHorasChart(context, ref),
+        ),
+        const SizedBox(width: DashboardSpacing.md),
+        Expanded(
+          flex: 4,
+          child: _buildRecientes(context, ref),
+        ),
+      ],
     );
   }
 }

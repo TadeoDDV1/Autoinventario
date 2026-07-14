@@ -48,6 +48,32 @@ func (h *Handler) RefrescarCatalogo(db *sqlx.DB) {
 	_ = coOccurre
 }
 
+// GetDashboardVentasHoy devuelve las ventas agregadas por hora para hoy.
+// GET /api/v1/dashboard/ventas-hoy
+func (h *Handler) GetDashboardVentasHoy(c *gin.Context) {
+	horas, err := h.dashboard.ResumenHorasHoy(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "INTERNAL_ERROR", "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, horas)
+}
+
+// GetDashboardRecientes devuelve las últimas N ventas de hoy.
+// GET /api/v1/dashboard/recientes?limit=5
+func (h *Handler) GetDashboardRecientes(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "5"))
+	if limit < 1 || limit > 50 {
+		limit = 5
+	}
+	recientes, err := h.dashboard.ListRecientesHoy(c.Request.Context(), limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "INTERNAL_ERROR", "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, recientes)
+}
+
 // GetSugerencias devuelve sugerencias para el carrito actual.
 // GET /api/v1/ia/sugerencias?carrito=1,2,3&limite=3
 func (h *Handler) GetSugerencias(c *gin.Context) {
