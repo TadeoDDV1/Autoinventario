@@ -5,13 +5,25 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/durations.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/format/money.dart';
-import '../../core/theme/glass_tokens.dart';
-import '../../core/widgets/glass_container.dart';
 import '../../models/venta.dart';
 import '../../providers/producto_provider.dart';
 import '../../providers/ia_provider.dart';
 import '../../providers/venta_provider.dart';
 
+/// Panel del carrito, simplificado. Aparece fijo en mobile y en el side
+/// panel del desktop.
+///
+/// Estructura nueva (una sola vista):
+/// ```
+///  Header:    "CARRITO (N items) | TOTAL $XXX.XX"
+///  Body:
+///    - Lista de items (alt máx 120). Cada item: nombre, qty +/-, subtotal
+///    - Empty state con icono
+///  Footer:
+///    - Row: IVA · Cambio · Método (segmented)
+///    - TextField monto recibido
+///    - Botón COBRAR full-width
+/// ```
 class QuickCartSummary extends ConsumerStatefulWidget {
   final VoidCallback onLimpiar;
 
@@ -52,7 +64,6 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
 
   Future<void> _onConfirmarPago() async {
     if (_procesando || !_puedeCobrar) return;
-
     final carrito = ref.read(carritoProvider);
     if (carrito.isEmpty) return;
 
@@ -99,28 +110,22 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
       ref.invalidate(ventasRecientesProvider);
 
       if (!mounted) return;
-
       _montoController.clear();
-      _mostrarSnackExito(
-        folio: folio,
-        cambio: cambio,
-        ventaId: ventaId,
-      );
+      _mostrarSnackExito(folio: folio, cambio: cambio, ventaId: ventaId);
     } on ApiException catch (e) {
       if (mounted) {
-        final msg = e.isStockInsuficiente
-            ? 'Stock insuficiente para uno de los productos'
-            : 'Error al registrar venta: ${e.message}';
-        _mostrarSnackError(msg);
+        _mostrarSnackError(
+          e.isStockInsuficiente
+              ? 'Stock insuficiente para uno de los productos'
+              : 'Error al registrar venta: ${e.message}',
+        );
       }
     } catch (e) {
       if (mounted) {
         _mostrarSnackError('Error al registrar venta: $e');
       }
     } finally {
-      if (mounted) {
-        setState(() => _procesando = false);
-      }
+      if (mounted) setState(() => _procesando = false);
     }
   }
 
@@ -129,7 +134,7 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
     double? cambio,
     int? ventaId,
   }) {
-    final cambiaTxt = (cambio != null && cambio > 0)
+    final cambioTxt = (cambio != null && cambio > 0)
         ? ' · Cambio ${money.format(cambio)}'
         : '';
     final messenger = ScaffoldMessenger.of(context);
@@ -142,7 +147,7 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Venta registrada · Folio $folio$cambiaTxt',
+                'Venta registrada · Folio $folio$cambioTxt',
                 style: const TextStyle(color: Colors.white),
               ),
             ),
@@ -187,9 +192,6 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
   }
 
   /// Abre un bottom-sheet con el flujo de cobro rápido disparado por Ctrl+P.
-  /// Pre-selecciona efectivo como método por defecto.
-  /// Si el carrito está vacío, muestra un snackbar y no hace nada.
-  /// Al confirmar el sheet, dispara el flujo normal de [_onConfirmarPago].
   Future<void> abrirDialogoCobroRapido() async {
     final carrito = ref.read(carritoProvider);
     if (carrito.isEmpty) {
@@ -201,9 +203,7 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
       );
       return;
     }
-    setState(() {
-      _metodoPago = MetodoPago.efectivo;
-    });
+    setState(() => _metodoPago = MetodoPago.efectivo);
     final montoRecibido = await showModalBottomSheet<double>(
       context: context,
       isScrollControlled: true,
@@ -212,9 +212,7 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
     );
     if (montoRecibido == null) return;
     if (!mounted) return;
-    setState(() {
-      _montoController.text = montoRecibido.toStringAsFixed(2);
-    });
+    setState(() => _montoController.text = montoRecibido.toStringAsFixed(2));
     await _onConfirmarPago();
   }
 
@@ -250,340 +248,142 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
-    return GlassContainer(
-      borderRadius: GlassTokens.borderRadiusLarge,
-      blur: GlassTokens.blurMedium,
-      borderColor: Colors.transparent,
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.1),
-          blurRadius: 10,
-          offset: const Offset(0, -2),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHigh,
+        border: Border(
+          top: BorderSide(
+            color: theme.colorScheme.outlineVariant,
+            width: 1,
+          ),
         ),
-      ],
-      customDecoration: BoxDecoration(
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(GlassTokens.borderRadiusLarge),
-          topRight: Radius.circular(GlassTokens.borderRadiusLarge),
-        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            offset: const Offset(0, -3),
+            blurRadius: 8,
+          ),
+        ],
       ),
-      child: _buildCartView(theme),
+      child: SafeArea(
+        top: false,
+        child: _buildBody(theme),
+      ),
     );
   }
 
-  Widget _buildCartView(ThemeData theme) {
+  Widget _buildBody(ThemeData theme) {
     final carrito = ref.watch(carritoProvider);
     final total = ref.watch(carritoTotalProvider);
     final iva = ref.watch(carritoIvaProvider);
     final formatter = money;
+    final cantidad = carrito.fold(0, (s, i) => s + i.cantidad);
     final cambio = _montoRecibido - total;
     final puedeCobrar = _puedeCobrar;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Header pequeño
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.15),
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(GlassTokens.borderRadiusLarge),
-              topRight: Radius.circular(GlassTokens.borderRadiusLarge),
-            ),
-          ),
+        // Header con TOTAL
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Row(
             children: [
-              Icon(
-                Icons.shopping_cart,
-                color: theme.colorScheme.onPrimaryContainer,
-              ),
+              Icon(Icons.shopping_cart,
+                  size: 18, color: theme.colorScheme.primary),
               const SizedBox(width: 8),
               Text(
-                'CARRITO (${carrito.fold(0, (sum, item) => sum + item.cantidad)} items)',
+                'CARRITO · $cantidad items',
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onPrimaryContainer,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                formatter.format(total),
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
             ],
           ),
         ),
 
-        // Lista de productos del carrito
-        if (carrito.isNotEmpty)
-          Container(
-            constraints: const BoxConstraints(maxHeight: 200),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = constraints.maxWidth > 600;
-                return ReorderableListView.builder(
-                  buildDefaultDragHandles: !isWide,
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 8),
-                  itemCount: carrito.length,
-                  onReorder: (oldIndex, newIndex) => ref
+        if (carrito.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Column(
+              children: [
+                Icon(Icons.shopping_cart_outlined,
+                    size: 40, color: theme.colorScheme.outline),
+                const SizedBox(height: 8),
+                Text(
+                  'Carrito vacío',
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: theme.colorScheme.outline),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Escanea o toca un producto del grid',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.outline),
+                ),
+              ],
+            ),
+          )
+        else
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 140),
+            child: ListView.builder(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: carrito.length,
+              itemBuilder: (context, index) {
+                final item = carrito[index];
+                return _ItemRow(
+                  item: item,
+                  onInc: () => ref
                       .read(carritoProvider.notifier)
-                      .reordenar(oldIndex, newIndex),
-                  itemBuilder: (context, index) {
-                    final item = carrito[index];
-                    return Padding(
-                      key: ValueKey('cart-item-${item.producto.id}'),
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
-                          if (isWide)
-                            ReorderableDragStartListener(
-                              index: index,
-                              child: Padding(
-                                padding: const EdgeInsets.only(right: 4),
-                                child: Icon(
-                                  Icons.drag_handle,
-                                  size: 18,
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ),
-                          GestureDetector(
-                            onTap: () => ref
-                                .read(carritoProvider.notifier)
-                                .decrementarCantidad(item.producto.id),
-                            child: Container(
-                              width: 28,
-                              height: 28,
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              alignment: Alignment.center,
-                              child: Icon(
-                                Icons.remove,
-                                size: 16,
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Container(
-                            width: 28,
-                            height: 28,
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.primary,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(
-                              '${item.cantidad}',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: theme.colorScheme.onPrimary,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          GestureDetector(
-                            onTap: () => ref
-                                .read(carritoProvider.notifier)
-                                .incrementarCantidad(item.producto.id),
-                            child: Container(
-                              width: 28,
-                              height: 28,
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              alignment: Alignment.center,
-                              child: Icon(
-                                Icons.add,
-                                size: 16,
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              item.producto.nombre,
-                              style: theme.textTheme.bodyMedium,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          Text(
-                            formatter.format(item.subtotal),
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          GestureDetector(
-                            onTap: () => ref
-                                .read(carritoProvider.notifier)
-                                .quitarProducto(item.producto.id),
-                            child: Icon(
-                              Icons.delete_outline,
-                              size: 18,
-                              color: theme.colorScheme.error,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+                      .incrementarCantidad(item.producto.id),
+                  onDec: () => ref
+                      .read(carritoProvider.notifier)
+                      .decrementarCantidad(item.producto.id),
+                  onRemove: () => ref
+                      .read(carritoProvider.notifier)
+                      .quitarProducto(item.producto.id),
                 );
               },
             ),
           ),
 
-        if (carrito.isEmpty)
+        if (carrito.isNotEmpty) ...[
           Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Icon(
-                  Icons.shopping_cart_outlined,
-                  size: 40,
-                  color: theme.colorScheme.outline,
-                ),
-                const SizedBox(height: 8),
                 Text(
-                  'Carrito vacío',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.outline,
-                  ),
+                  'IVA 16%',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
-                const SizedBox(height: 4),
                 Text(
-                  'Escanea productos para agregarlos',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.outline,
-                  ),
+                  formatter.format(iva),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ],
             ),
           ),
-
-        const Divider(height: 1),
-
-        // Totales
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'IVA (16%)',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  Text(
-                    formatter.format(iva),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(
-                    'Total',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    formatter.format(total),
-                    style: TextStyle(
-                      fontSize: 36,
-                      fontWeight: FontWeight.w900,
-                      color: theme.colorScheme.primary,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-
-        const Divider(height: 1),
-
-        // Método de pago
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: Row(
-            children: [
-              _buildMetodoChip(theme, MetodoPago.efectivo, Icons.money),
-              const SizedBox(width: 8),
-              _buildMetodoChip(theme, MetodoPago.tarjeta, Icons.credit_card),
-            ],
-          ),
-        ),
-
-        // Campo monto recibido (solo efectivo)
-        if (_metodoPago == MetodoPago.efectivo) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Monto recibido',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: _montoController,
-                  focusNode: _montoFocusNode,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(
-                        RegExp(r'^\d*\.?\d{0,2}')),
-                  ],
-                  onChanged: (_) => setState(() {}),
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                  decoration: InputDecoration(
-                    prefixText: '\$ ',
-                    prefixStyle: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.primary,
-                    ),
-                    hintText: '0.00',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 14,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (_montoRecibido > 0)
+          if (_metodoPago == MetodoPago.efectivo && _montoRecibido > 0)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Cambio', style: theme.textTheme.bodyLarge),
+                  Text('Cambio', style: theme.textTheme.bodyMedium),
                   Text(
                     formatter.format(cambio > 0 ? cambio : 0),
                     style: theme.textTheme.titleMedium?.copyWith(
@@ -596,134 +396,227 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
                 ],
               ),
             ),
-        ] else ...[
-          // Tarjeta
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
+        ],
+
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Row(
+            children: [
+              _MetodoChip(
+                label: 'Efectivo',
+                icon: Icons.money,
+                selected: _metodoPago == MetodoPago.efectivo,
+                disabled: _procesando,
+                onTap: () => setState(() {
+                  _metodoPago = MetodoPago.efectivo;
+                }),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.credit_card, color: theme.colorScheme.primary),
-                  const SizedBox(width: 8),
-                  Text('Pago con tarjeta', style: theme.textTheme.titleMedium),
-                ],
+              const SizedBox(width: 8),
+              _MetodoChip(
+                label: 'Tarjeta',
+                icon: Icons.credit_card,
+                selected: _metodoPago == MetodoPago.tarjeta,
+                disabled: _procesando,
+                onTap: () => setState(() {
+                  _metodoPago = MetodoPago.tarjeta;
+                  _montoController.clear();
+                }),
+              ),
+            ],
+          ),
+        ),
+
+        if (_metodoPago == MetodoPago.efectivo)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: TextField(
+              controller: _montoController,
+              focusNode: _montoFocusNode,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(
+                    RegExp(r'^\d*\.?\d{0,2}')),
+              ],
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                labelText: 'Monto recibido',
+                prefixText: '\$ ',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                isDense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               ),
             ),
           ),
-        ],
 
-        // BOTÓN COBRAR (única forma de confirmar)
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
           child: SizedBox(
             width: double.infinity,
             height: 52,
-            child: Tooltip(
-              message: 'Cobrar (Ctrl+P)',
-              child: FilledButton.icon(
-                onPressed: puedeCobrar ? _onConfirmarPago : null,
-                style: FilledButton.styleFrom(
-                  backgroundColor: puedeCobrar
-                      ? Colors.green.shade700
-                      : theme.colorScheme.surfaceContainerHighest,
-                  foregroundColor: puedeCobrar
-                      ? Colors.white
-                      : theme.colorScheme.onSurfaceVariant,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+            child: FilledButton.icon(
+              onPressed: puedeCobrar ? _onConfirmarPago : null,
+              style: FilledButton.styleFrom(
+                backgroundColor: puedeCobrar
+                    ? Colors.green.shade700
+                    : theme.colorScheme.surfaceContainerHighest,
+                foregroundColor: puedeCobrar
+                    ? Colors.white
+                    : theme.colorScheme.onSurfaceVariant,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                icon: _procesando
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.check_circle, size: 22),
-                label: Text(
-                  _procesando
-                      ? 'Procesando...'
-                      : (puedeCobrar
-                          ? 'COBRAR ${formatter.format(total)}'
-                          : (_metodoPago == MetodoPago.efectivo &&
-                                  carrito.isNotEmpty
-                              ? 'Falta \$${(total - _montoRecibido).toStringAsFixed(2)}'
-                              : 'Agrega productos')),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+              ),
+              icon: _procesando
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.check_circle, size: 22),
+              label: Text(
+                _procesando
+                    ? 'Procesando...'
+                    : (puedeCobrar
+                        ? 'COBRAR ${formatter.format(total)}'
+                        : (_metodoPago == MetodoPago.efectivo &&
+                                carrito.isNotEmpty
+                            ? 'Falta \$${(total - _montoRecibido).toStringAsFixed(2)}'
+                            : 'Agrega productos')),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
                 ),
               ),
             ),
           ),
         ),
-
-        // Botón limpiar
-        if (carrito.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: SizedBox(
-              width: double.infinity,
-              child: TextButton.icon(
-                onPressed: _procesando ? null : _onLimpiarCarrito,
-                icon: Icon(Icons.delete_sweep,
-                    color: theme.colorScheme.error),
-                label: Text(
-                  'Limpiar carrito',
-                  style: TextStyle(color: theme.colorScheme.error),
-                ),
-              ),
-            ),
-          ),
       ],
     );
   }
+}
 
-  Widget _buildMetodoChip(
-      ThemeData theme, MetodoPago value, IconData icon) {
-    final selected = _metodoPago == value;
+class _ItemRow extends StatelessWidget {
+  final CarritoItem item;
+  final VoidCallback onInc;
+  final VoidCallback onDec;
+  final VoidCallback onRemove;
+
+  const _ItemRow({
+    required this.item,
+    required this.onInc,
+    required this.onDec,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final formatter = money;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: onDec,
+            icon: const Icon(Icons.remove_circle_outline),
+            visualDensity: VisualDensity.compact,
+          ),
+          SizedBox(
+            width: 32,
+            child: Text(
+              '${item.cantidad}',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: onInc,
+            icon: const Icon(Icons.add_circle_outline),
+            visualDensity: VisualDensity.compact,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              item.producto.nombre,
+              style: theme.textTheme.bodyMedium,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            formatter.format(item.subtotal),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          IconButton(
+            onPressed: onRemove,
+            icon: Icon(Icons.close,
+                size: 16, color: theme.colorScheme.outline),
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Quitar',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetodoChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final bool disabled;
+  final VoidCallback onTap;
+
+  const _MetodoChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.disabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Expanded(
-      child: GestureDetector(
-        onTap: _procesando
-            ? null
-            : () => setState(() {
-                  _metodoPago = value;
-                  if (value == MetodoPago.tarjeta) _montoController.clear();
-                }),
+      child: InkWell(
+        onTap: disabled ? null : onTap,
+        borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
             color: selected
                 ? theme.colorScheme.primaryContainer
-                : theme.colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(10),
+                : theme.colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(12),
             border: selected
-                ? Border.all(color: theme.colorScheme.primary, width: 2)
-                : null,
+                ? Border.all(color: theme.colorScheme.primary, width: 1.5)
+                : Border.all(color: theme.colorScheme.outlineVariant),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
                 icon,
-                size: 18,
+                size: 16,
                 color: selected
                     ? theme.colorScheme.onPrimaryContainer
                     : theme.colorScheme.onSurfaceVariant,
               ),
               const SizedBox(width: 6),
               Text(
-                value.label,
+                label,
                 style: theme.textTheme.labelLarge?.copyWith(
                   color: selected
                       ? theme.colorScheme.onPrimaryContainer
@@ -740,9 +633,6 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
 }
 
 /// Bottom-sheet de cobro rápido disparado por Ctrl+P desde la pantalla Caja.
-/// Pre-selecciona efectivo, pide monto recibido y devuelve el valor al estado
-/// padre ([QuickCartSummaryState]) para que dispare el flujo de confirmación
-/// normal contra el backend.
 class _CobroRapidoSheet extends StatefulWidget {
   final double total;
 
@@ -809,9 +699,8 @@ class _CobroRapidoSheetState extends State<_CobroRapidoSheet> {
             ),
             Text(
               'Cobro rápido',
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: theme.textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
             Text(
@@ -831,14 +720,9 @@ class _CobroRapidoSheetState extends State<_CobroRapidoSheet> {
               ],
               onChanged: (_) => setState(() {}),
               onSubmitted: (_) {
-                if (puedeCobrar) {
-                  Navigator.of(context).pop(monto);
-                }
+                if (puedeCobrar) Navigator.of(context).pop(monto);
               },
-              style: const TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
               decoration: InputDecoration(
                 labelText: 'Monto recibido',
                 prefixText: '\$ ',
@@ -867,9 +751,8 @@ class _CobroRapidoSheetState extends State<_CobroRapidoSheet> {
             ],
             const SizedBox(height: 20),
             FilledButton.icon(
-              onPressed: puedeCobrar
-                  ? () => Navigator.of(context).pop(monto)
-                  : null,
+              onPressed:
+                  puedeCobrar ? () => Navigator.of(context).pop(monto) : null,
               icon: const Icon(Icons.check_circle),
               label: Text(
                 puedeCobrar
@@ -877,7 +760,8 @@ class _CobroRapidoSheetState extends State<_CobroRapidoSheet> {
                     : 'Falta ${formatter.format(widget.total - monto)}',
               ),
               style: FilledButton.styleFrom(
-                backgroundColor: puedeCobrar ? Colors.green.shade700 : null,
+                backgroundColor:
+                    puedeCobrar ? Colors.green.shade700 : null,
                 foregroundColor: puedeCobrar ? Colors.white : null,
                 minimumSize: const Size(double.infinity, 52),
               ),

@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/durations.dart';
 import '../../core/format/money.dart';
 import '../../core/layout/breakpoints.dart';
-import '../../core/theme/glass_tokens.dart';
 import '../../core/widgets/atmospheric_background.dart';
 import '../../core/widgets/glass_container.dart';
 import '../../models/producto.dart';
@@ -15,8 +14,9 @@ import '../../providers/producto_provider.dart';
 import '../../providers/venta_provider.dart';
 import '../../providers/ia_chat_bubble_provider.dart';
 import '../../widgets/caja/alta_rapida_sheet.dart';
-import '../../widgets/caja/barcode_input.dart';
+import '../../widgets/caja/product_tile.dart';
 import '../../widgets/caja/quick_cart_summary.dart';
+import '../../widgets/caja/sticky_search_bar.dart';
 import '../../widgets/ia/ia_chat_bubble.dart';
 
 class _ClearCartIntent extends Intent {
@@ -265,48 +265,13 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
   ) {
     final posicion = ref.watch(burbujaPosicionProvider);
     return Scaffold(
+      backgroundColor: theme.colorScheme.surface,
       body: Stack(
         children: [
           const AtmosphericBackground(),
           Column(
             children: [
-              // Header con modo — glass
-              GlassContainer(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                borderRadius: 0,
-                blur: GlassTokens.blurSmall,
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.point_of_sale,
-                      color: theme.colorScheme.onPrimaryContainer,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'MODO CAJA',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.onPrimaryContainer,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                    const Spacer(),
-                    TextButton.icon(
-                      onPressed: () => context.go('/caja/historial'),
-                      icon: Icon(
-                        Icons.receipt_long,
-                        color: theme.colorScheme.onPrimaryContainer,
-                        size: 20,
-                      ),
-                      label: Text(
-                        'Historial',
-                        style: TextStyle(color: theme.colorScheme.onPrimaryContainer),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Contenido principal
+              _buildHeader(theme),
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
@@ -317,7 +282,7 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
                         children: [
                           Expanded(
                             flex: 3,
-                            child: _buildProductArea(
+                            child: _buildProductAreaDesktop(
                               theme,
                               productosAsync,
                             ),
@@ -325,7 +290,7 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
                           Container(
                             width: 360,
                             decoration: BoxDecoration(
-                              color: theme.colorScheme.surface,
+                              color: theme.colorScheme.surfaceContainerHigh,
                               border: Border(
                                 left: BorderSide(
                                   color: theme.colorScheme.outlineVariant,
@@ -340,29 +305,13 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
                           ),
                         ],
                       );
-                    } else {
-                      return Column(
-                        children: [
-                          Expanded(
-                            child: _buildProductArea(
-                              theme,
-                              productosAsync,
-                            ),
-                          ),
-                          QuickCartSummary(
-                            key: _cartKey,
-                            onLimpiar: () =>
-                                ref.read(carritoProvider.notifier).vaciar(),
-                          ),
-                        ],
-                      );
                     }
+                    return _buildMobileLayout(theme, productosAsync);
                   },
                 ),
               ),
             ],
           ),
-          // Burbuja de IA flotante estilo Messenger
           Positioned(
             bottom: MediaQuery.of(context).padding.bottom + 16,
             right: posicion == BurbujaPosicion.bottomRight ? 16 : null,
@@ -374,192 +323,289 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
     );
   }
 
-  Widget _buildProductArea(
+  /// Header slim M3 sólido (sin glass, sin blur).
+  Widget _buildHeader(ThemeData theme) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: theme.colorScheme.outlineVariant,
+            width: 1,
+          ),
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              Icon(
+                Icons.point_of_sale,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'MODO CAJA',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: () => context.go('/caja/historial'),
+                icon: const Icon(Icons.receipt_long, size: 20),
+                label: const Text('Historial'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Layout mobile v2: 3 secciones sticky.
+  ///   1. StickySearchBar arriba.
+  ///   2. Grid de productos scrollable en el centro.
+  ///   3. QuickCartSummary siempre fijo abajo.
+  Widget _buildMobileLayout(ThemeData theme, AsyncValue productosAsync) {
+    return Column(
+      children: [
+        StickySearchBar(
+          onProductoEncontrado: _onProductoScan,
+          onError: _onScanError,
+          onProductoNoRegistrado: _onProductoNoRegistrado,
+          externalFocusNode: _inputFocus,
+        ),
+        if (_ultimoCodigoNoRegistrado != null)
+          _NoRegistradoBanner(
+            codigo: _ultimoCodigoNoRegistrado!,
+            onTapAlta: () => _abrirAltaRapida(codigo: _ultimoCodigoNoRegistrado),
+            onDismiss: _limpiarUltimoCodigoNoRegistrado,
+          ),
+        Expanded(
+          child: _buildProductGrid(productosAsync),
+        ),
+        QuickCartSummary(
+          key: _cartKey,
+          onLimpiar: () => ref.read(carritoProvider.notifier).vaciar(),
+        ),
+      ],
+    );
+  }
+
+  /// Layout desktop: buscador arriba + lista vertical de items del carrito.
+  /// (Mantiene diseño previo por compatibilidad.)
+  Widget _buildProductAreaDesktop(
     ThemeData theme,
     AsyncValue productosAsync,
   ) {
     final carrito = ref.watch(carritoProvider);
     final formatter = money;
-
     return Column(
       children: [
-        // Input de código de barras — STICKY en la parte superior (glass)
-        GlassContainer(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          borderRadius: 0,
-          blur: GlassTokens.blurSmall,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Bloque B — Task B3: banner persistente tras scan fallido.
-              if (_ultimoCodigoNoRegistrado != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8, left: 12, right: 12),
-                  child: Material(
-                    color: theme.colorScheme.errorContainer,
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () => _abrirAltaRapida(codigo: _ultimoCodigoNoRegistrado),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.warning_amber_rounded,
-                              color: theme.colorScheme.onErrorContainer,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Último código "${_ultimoCodigoNoRegistrado}" no registrado. ¿Agregarlo ahora?',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onErrorContainer,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                            FilledButton.tonal(
-                              onPressed: () => _abrirAltaRapida(codigo: _ultimoCodigoNoRegistrado),
-                              child: const Text('Alta rápida'),
-                            ),
-                            const SizedBox(width: 4),
-                            IconButton(
-                              icon: const Icon(Icons.close, size: 18),
-                              tooltip: 'Descartar',
-                              onPressed: _limpiarUltimoCodigoNoRegistrado,
-                            ),
-                          ],
+        StickySearchBar(
+          onProductoEncontrado: _onProductoScan,
+          onError: _onScanError,
+          onProductoNoRegistrado: _onProductoNoRegistrado,
+          externalFocusNode: _inputFocus,
+        ),
+        if (_ultimoCodigoNoRegistrado != null)
+          _NoRegistradoBanner(
+            codigo: _ultimoCodigoNoRegistrado!,
+            onTapAlta: () => _abrirAltaRapida(codigo: _ultimoCodigoNoRegistrado),
+            onDismiss: _limpiarUltimoCodigoNoRegistrado,
+          ),
+        Expanded(
+          child: carrito.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.qr_code_scanner,
+                          size: 64,
+                          color: theme.colorScheme.primary
+                              .withValues(alpha: 0.6),
                         ),
-                      ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Escanea un producto',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Usa la cámara del celular,\nel lector de códigos, o escribe el código arriba',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              BarcodeInput(
-                onProductoEncontrado: _onProductoScan,
-                onError: _onScanError,
-                onProductoNoRegistrado: _onProductoNoRegistrado,
-                externalFocusNode: _inputFocus,
-              ),
-            ],
-          ),
-        ),
-
-        // Lista de productos escaneados en esta sesión
-          Expanded(
-            child: carrito.isEmpty
-                ? Center(
-                    child: GlassContainer(
-                      padding: const EdgeInsets.all(32),
-                      blur: GlassTokens.blurMedium,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.qr_code_scanner,
-                            size: 64,
-                            color: theme.colorScheme.primary.withValues(alpha: 0.6),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Escanea un producto',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Usa la cámara del celular,\nel lector de códigos, o escribe el código arriba',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 24),
-                          Wrap(
-                            spacing: 8,
-                            children: [
-                              OutlinedButton.icon(
-                                onPressed: () => context.go('/inventario/escanear'),
-                                icon: const Icon(Icons.add_a_photo_outlined, size: 18),
-                                label: const Text('Escanear nuevo'),
-                              ),
-                              OutlinedButton.icon(
-                                onPressed: () => context.go('/inventario/nuevo'),
-                                icon: const Icon(Icons.edit_note, size: 18),
-                                label: const Text('Manual'),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
+                )
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                   itemCount: carrito.length,
                   itemBuilder: (context, index) {
                     final item = carrito[index];
-                    return GlassContainer(
+                    return Card(
                       margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(12),
-                      borderRadius: GlassTokens.borderRadiusSmall,
-                      blur: GlassTokens.blurSmall,
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.primaryContainer,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(
-                              '${item.cantidad}',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color:
-                                    theme.colorScheme.onPrimaryContainer,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.primaryContainer,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                '${item.cantidad}',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color:
+                                      theme.colorScheme.onPrimaryContainer,
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  item.producto.nombre,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.producto.nombre,
+                                    style:
+                                        theme.textTheme.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Text(
-                                  formatter.format(item.producto.precioVenta),
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color:
-                                        theme.colorScheme.onSurfaceVariant,
+                                  Text(
+                                    formatter
+                                        .format(item.producto.precioVenta),
+                                    style:
+                                        theme.textTheme.bodySmall?.copyWith(
+                                      color:
+                                          theme.colorScheme.onSurfaceVariant,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                          Text(
-                            formatter.format(item.subtotal),
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
+                            Text(
+                              formatter.format(item.subtotal),
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     );
                   },
                 ),
         ),
       ],
+    );
+  }
+
+  /// Grid de productos (solo mobile): tap = +1, longPress = -1.
+  Widget _buildProductGrid(AsyncValue productosAsync) {
+    return productosAsync.when(
+      data: (productos) {
+        return GridView.builder(
+          padding: const EdgeInsets.all(12),
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 200,
+            childAspectRatio: 1.3,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+          ),
+          itemCount: productos.length,
+          itemBuilder: (context, index) {
+            return ProductTile(producto: productos[index]);
+          },
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      error: (e, _) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            'Error al cargar productos: $e',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Banner de "código no registrado" — sólido, no glass.
+class _NoRegistradoBanner extends StatelessWidget {
+  final String codigo;
+  final VoidCallback onTapAlta;
+  final VoidCallback onDismiss;
+
+  const _NoRegistradoBanner({
+    required this.codigo,
+    required this.onTapAlta,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+        child: Row(
+          children: [
+            Icon(
+              Icons.warning_amber_rounded,
+              color: theme.colorScheme.onErrorContainer,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Código "$codigo" no registrado',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onErrorContainer,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: onTapAlta,
+              style: TextButton.styleFrom(
+                foregroundColor: theme.colorScheme.onErrorContainer,
+              ),
+              child: const Text('Alta rápida'),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              tooltip: 'Descartar',
+              color: theme.colorScheme.onErrorContainer,
+              onPressed: onDismiss,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

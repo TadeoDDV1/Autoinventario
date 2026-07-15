@@ -17,9 +17,9 @@ class FerreteriaApp extends ConsumerWidget {
     final theme = FlexThemeData.light(
       scheme: FlexScheme.blue,
       surfaceMode: FlexSurfaceMode.levelSurfacesLowScaffold,
-      blendLevel: 7,
+      blendLevel: 12,
       subThemesData: const FlexSubThemesData(
-        blendOnLevel: 10,
+        blendOnLevel: 15,
         blendOnColors: false,
         useM2StyleDividerInM3: true,
         alignedDropdown: true,
