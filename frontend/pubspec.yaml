@@ -40,6 +40,8 @@ dependencies:
   google_fonts: ^8.0.2
   flex_color_scheme: ^8.4.0
   dio: ^5.9.2
+  drift: ^2.14.0
+  drift_sqflite: ^2.0.0
   intl: ^0.20.2
   barcode_widget: ^2.0.4
   shared_preferences: ^2.3.4

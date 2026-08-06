@@ -5,7 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/api_config.dart';
+import '../database/app_database.dart';
+import '../database/database_provider.dart';
 import '../core/api/dio_client.dart';
+import '../providers/producto_provider.dart';
 import 'cache_service.dart';
 
 /// Estado de conectividad de la app.
@@ -33,10 +36,18 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
         receiveTimeout: const Duration(seconds: 3),
       ));
       final resp = await dio.get('/health').timeout(const Duration(seconds: 4));
-      if (resp.statusCode == 200) {
-        _consecutiveFailures = 0;
-        if (state != ConectividadEstado.sincronizando) {
-          state = ConectividadEstado.online;
+if (resp.statusCode == 200) {
+          _consecutiveFailures = 0;
+          if (state != ConectividadEstado.sincronizando) {
+            state = ConectividadEstado.online;
+          }
+          // Refresh local catalog from server
+          await _refreshCatalog();
+          // Si acabamos de reconectar, intentar sincronizar
+          if (_wasOffline) {
+            _wasOffline = false;
+            await _sincronizarCola();
+          }
         }
         // Si acabamos de reconectar, intentar sincronizar
         if (_wasOffline) {
@@ -207,6 +218,55 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
         encolado: false
       );
     }
+  }
+}
+
+Future<void> _refreshCatalog() async {
+  final api = ref.read(apiServiceProvider);
+  try {
+    // Fetch all products (big page size) and categories
+    final productosResp = await api.getProductos(pageSize: 1000);
+    final productos = productosResp.data;
+    final categorias = await api.getCategorias();
+
+    final db = ref.read(appDatabaseProvider);
+    await db.clearProductos();
+    await db.clearCategorias();
+
+    // Insert products
+    await db.insertProductos(productos.map((p) => ProductosCompanion(
+      id: Value(p.id),
+      codigoBarras: Value(p.codigoBarras),
+      sku: Value(p.sku),
+      nombre: Value(p.nombre),
+      marca: Value(p.marca),
+      descripcion: Value(p.descripcion),
+      uso: Value(p.uso),
+      precioCompra: Value(p.precioCompra),
+      precioVenta: Value(p.precioVenta),
+      precioMayoreo: Value(p.precioMayoreo),
+      unidadMedida: Value(p.unidadMedida.value),
+      stockActual: Value(p.stockActual),
+      stockMinimo: Value(p.stockMinimo),
+      categoriaId: Value(p.categoriaId),
+      ubicacion: Value(p.ubicacion),
+      activo: Value(p.activo),
+      createdAt: Value(p.createdAt),
+      updatedAt: Value(p.updatedAt),
+      categoriaNombre: Value(p.categoriaNombre),
+    )).toList());
+
+    // Insert categories
+    await db.insertCategorias(categorias.map((c) => CategoriasCompanion(
+      id: Value(c.id),
+      nombre: Value(c.nombre),
+      descripcion: Value(c.descripcion),
+      activo: const Value(true),
+      createdAt: Value(DateTime.now()),
+      updatedAt: Value(DateTime.now()),
+    )).toList());
+  } catch (_) {
+    // ignore errors, will retry on next ping
   }
 }
 
