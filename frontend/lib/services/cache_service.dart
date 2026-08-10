@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:drift/drift.dart';
+import '../database/app_database.dart' hide Producto, Categoria;
+import '../database/database_provider.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -59,27 +62,27 @@ class CacheService {
   /// Encola una venta pendiente. La venta lleva un clientId generado en
   /// el cliente para que el backend pueda reconciliar.
   Future<void> encolarVenta(VentaPendiente venta) async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_colaVentasKey);
-    final cola = raw != null
-        ? (jsonDecode(raw) as List<dynamic>)
-            .map((e) => VentaPendiente.fromJson(e as Map<String, dynamic>))
-            .toList()
-        : <VentaPendiente>[];
-    cola.add(venta);
-    await prefs.setString(
-      _colaVentasKey,
-      jsonEncode(cola.map((v) => v.toJson()).toList()),
-    );
+    // Guardamos la venta pendiente en la tabla SQLite
+    final db = AppDatabase();
+    await db.addVentaPendiente(VentasPendientesCompanion(
+      clientId: Value(venta.clientId),
+      createdAt: Value(venta.createdAt),
+      ventaData: Value(jsonEncode(venta.ventaData)),
+      total: Value(venta.total),
+      synced: const Value(false),
+    ));
   }
 
   Future<List<VentaPendiente>> getColaVentas() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_colaVentasKey);
-    if (raw == null) return [];
-    final list = jsonDecode(raw) as List<dynamic>;
-    return list
-        .map((e) => VentaPendiente.fromJson(e as Map<String, dynamic>))
+    final db = AppDatabase();
+    final rows = await db.getVentasPendientes();
+    return rows
+        .map((row) => VentaPendiente(
+              clientId: row.clientId,
+              createdAt: row.createdAt,
+              ventaData: jsonDecode(row.ventaData) as Map<String, dynamic>,
+              total: row.total,
+            ))
         .toList();
   }
 
@@ -87,17 +90,11 @@ class CacheService {
   /// clientIds estén en la lista.
   Future<void> marcarSincronizadas(List<String> clientIds) async {
     if (clientIds.isEmpty) return;
+    // Marca en la DB como sincronizada
+    final db = AppDatabase();
+    await db.markVentasSynced(clientIds);
+    // Actualiza la marca de tiempo de última sincronización
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_colaVentasKey);
-    if (raw == null) return;
-    final cola = (jsonDecode(raw) as List<dynamic>)
-        .map((e) => VentaPendiente.fromJson(e as Map<String, dynamic>))
-        .where((v) => !clientIds.contains(v.clientId))
-        .toList();
-    await prefs.setString(
-      _colaVentasKey,
-      jsonEncode(cola.map((v) => v.toJson()).toList()),
-    );
     await prefs.setInt(_lastSyncKey, DateTime.now().millisecondsSinceEpoch);
   }
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/ferreteria/backend/internal/apperrors"
 	"github.com/ferreteria/backend/internal/models"
+	"github.com/ferreteria/backend/internal/repository"
 	"github.com/ferreteria/backend/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
@@ -70,8 +71,14 @@ func (h *EntradaHandler) GetAll(c *gin.Context) {
 	})
 }
 
-// GetHistorial devuelve entradas filtradas por rango de fechas (YYYY-MM-DD).
-// Parámetros opcionales: `desde`, `hasta`. Si faltan, devuelve todas.
+// GetHistorial devuelve entradas con filtros opcionales:
+//   - `desde`     (YYYY-MM-DD) — fecha mínima.
+//   - `hasta`     (YYYY-MM-DD) — fecha máxima (inclusive, fin del día).
+//   - `proveedor` — match parcial sobre la columna `proveedor`.
+//   - `q`         — match parcial sobre `folio` u `observaciones`.
+//
+// Las entradas devueltas incluyen sus detalles y el `nombre_producto`
+// cargado desde el catálogo de productos.
 func (h *EntradaHandler) GetHistorial(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
@@ -95,7 +102,14 @@ func (h *EntradaHandler) GetHistorial(c *gin.Context) {
 		return
 	}
 
-	entradas, total, err := h.service.GetByDateRange(desde, hasta, page, pageSize)
+	filtros := repository.FiltrosEntradas{
+		Desde:     desde,
+		Hasta:     hasta,
+		Proveedor: c.Query("proveedor"),
+		Q:         c.Query("q"),
+	}
+
+	entradas, total, err := h.service.GetByDateRange(filtros, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIError{Error: "INTERNAL_ERROR", Message: "Error al obtener historial"})
 		return

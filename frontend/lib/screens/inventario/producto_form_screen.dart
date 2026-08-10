@@ -441,8 +441,8 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
                 prefixIcon: Icon(Icons.category_outlined),
               ),
               items: categorias
-                  .map(
-                    (c) => DropdownMenuItem(
+                  .map<DropdownMenuItem<int>>(
+                    (c) => DropdownMenuItem<int>(
                       value: c.id,
                       child: Text(c.nombre),
                     ),
@@ -464,8 +464,8 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
                     prefixIcon: Icon(Icons.straighten),
                   ),
                   items: UnidadMedida.values
-                      .map(
-                        (u) => DropdownMenuItem(
+                      .map<DropdownMenuItem<UnidadMedida>>(
+                        (u) => DropdownMenuItem<UnidadMedida>(
                           value: u,
                           child: Text(u.label),
                         ),

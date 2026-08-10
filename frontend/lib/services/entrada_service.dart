@@ -18,25 +18,10 @@ class EntradaService {
     }
   }
 
-  Future<List<EntradaInventario>> getAll({int page = 1, int pageSize = 20}) async {
-    try {
-      final response = await _dio.get('/entradas', queryParameters: {
-        'page': page,
-        'page_size': pageSize,
-      });
-      final body = response.data as Map<String, dynamic>;
-      final list = body['data'] as List<dynamic>;
-      return list
-          .map((e) => EntradaInventario.fromJson(e as Map<String, dynamic>))
-          .toList();
-    } on DioException catch (e) {
-      throw ApiException.fromDio(e);
-    }
-  }
-
-  Future<List<EntradaInventario>> getHistorial({
-    String? desde,
-    String? hasta,
+  /// Devuelve entradas paginadas con sus detalles cargados.
+  Future<PaginatedEntradas> getAll({
+    String? proveedor,
+    String? q,
     int page = 1,
     int pageSize = 20,
   }) async {
@@ -45,15 +30,42 @@ class EntradaService {
         'page': page,
         'page_size': pageSize,
       };
-      if (desde != null && desde.isNotEmpty) params['desde'] = desde;
-      if (hasta != null && hasta.isNotEmpty) params['hasta'] = hasta;
+      if (proveedor != null && proveedor.isNotEmpty) {
+        params['proveedor'] = proveedor;
+      }
+      if (q != null && q.isNotEmpty) params['q'] = q;
 
-      final response = await _dio.get('/entradas/historial', queryParameters: params);
-      final body = response.data as Map<String, dynamic>;
-      final list = body['data'] as List<dynamic>;
-      return list
-          .map((e) => EntradaInventario.fromJson(e as Map<String, dynamic>))
-          .toList();
+      final response = await _dio.get('/entradas', queryParameters: params);
+      return PaginatedEntradas.fromJson(
+        response.data as Map<String, dynamic>,
+      );
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
+  /// Devuelve entradas filtradas con sus detalles cargados.
+  Future<PaginatedEntradas> getHistorial(HistorialFiltro filtro) async {
+    try {
+      final response = await _dio.get(
+        '/entradas/historial',
+        queryParameters: filtro.toQueryParams(),
+      );
+      return PaginatedEntradas.fromJson(
+        response.data as Map<String, dynamic>,
+      );
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
+  /// Devuelve una entrada por ID con todos sus detalles.
+  Future<EntradaInventario> getById(int id) async {
+    try {
+      final response = await _dio.get('/entradas/$id');
+      return EntradaInventario.fromJson(
+        response.data as Map<String, dynamic>,
+      );
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }

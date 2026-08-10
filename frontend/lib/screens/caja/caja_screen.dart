@@ -8,7 +8,6 @@ import '../../core/constants/durations.dart';
 import '../../core/format/money.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/widgets/atmospheric_background.dart';
-import '../../core/widgets/glass_container.dart';
 import '../../models/producto.dart';
 import '../../providers/producto_provider.dart';
 import '../../providers/venta_provider.dart';
@@ -525,7 +524,8 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
   /// Grid de productos (solo mobile): tap = +1, longPress = -1.
   Widget _buildProductGrid(AsyncValue productosAsync) {
     return productosAsync.when(
-      data: (productos) {
+      data: (paginated) {
+        final productos = paginated.data;
         return GridView.builder(
           padding: const EdgeInsets.all(12),
           gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -540,7 +540,8 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
           },
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      loading: () =>
+          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       error: (e, _) => Center(
         child: Padding(
           padding: const EdgeInsets.all(24),

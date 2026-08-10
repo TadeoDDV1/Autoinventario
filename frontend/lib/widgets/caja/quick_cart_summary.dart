@@ -216,35 +216,6 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
     await _onConfirmarPago();
   }
 
-  Future<void> _onLimpiarCarrito() async {
-    final carrito = ref.read(carritoProvider);
-    if (carrito.isEmpty) return;
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Limpiar carrito'),
-        content: Text(
-          'Vas a eliminar ${carrito.length} producto${carrito.length != 1 ? 's' : ''} del carrito. ¿Continuar?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Limpiar'),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true) return;
-    ref.read(carritoProvider.notifier).vaciar();
-    _montoController.clear();
-    setState(() {});
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);

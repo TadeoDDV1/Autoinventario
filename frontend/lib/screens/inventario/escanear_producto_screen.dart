@@ -484,7 +484,7 @@ class _EscanearProductoScreenState extends ConsumerState<EscanearProductoScreen>
                       prefixIcon: Icon(Icons.category_outlined),
                     ),
                     items: categorias
-                        .map(
+                        .map<DropdownMenuItem<int>>(
                           (c) => DropdownMenuItem<int>(
                             value: c.id,
                             child: Text(c.nombre),

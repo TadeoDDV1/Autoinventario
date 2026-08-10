@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
 import 'package:drift_sqflite/drift_sqflite.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -54,7 +55,7 @@ class AppDatabase extends _$AppDatabase {
 
   // Productos
   Future<void> clearProductos() => delete(productos).go();
-  Future<void> insertProductos(List<ProductoCompanion> rows) async {
+  Future<void> insertProductos(List<ProductosCompanion> rows) async {
     await batch((batch) {
       batch.insertAllOnConflictUpdate(productos, rows);
     });
@@ -63,7 +64,7 @@ class AppDatabase extends _$AppDatabase {
 
   // Categorias
   Future<void> clearCategorias() => delete(categorias).go();
-  Future<void> insertCategorias(List<CategoriaCompanion> rows) async {
+  Future<void> insertCategorias(List<CategoriasCompanion> rows) async {
     await batch((batch) {
       batch.insertAllOnConflictUpdate(categorias, rows);
     });
@@ -71,20 +72,20 @@ class AppDatabase extends _$AppDatabase {
   Future<List<Categoria>> getAllCategorias() => select(categorias).get();
 
   // Ventas pendientes
-  Future<void> addVentaPendiente(VentasPendienteCompanion row) async {
+  Future<void> addVentaPendiente(VentasPendientesCompanion row) async {
     await into(ventasPendientes).insertOnConflictUpdate(row);
   }
-  Future<List<VentasPendienteData>> getVentasPendientes() =>
+  Future<List<VentasPendiente>> getVentasPendientes() =>
       (select(ventasPendientes)..where((tbl) => tbl.synced.equals(false))).get();
   Future<void> markVentasSynced(List<String> clientIds) async {
-    await (update(ventasPendientes)
-            .where((tbl) => tbl.clientId.isIn(clientIds)))
-        .write(const VentasPendienteCompanion(synced: Value(true)));
+    await (delete(ventasPendientes)..where((tbl) => tbl.clientId.isIn(clientIds))).go();
   }
 }
 
-Future<LazyDatabase> _openConnection() async {
-  final dbFolder = await getApplicationDocumentsDirectory();
-  final file = File(p.join(dbFolder.path, 'app.db'));
-  return LazyDatabase(() => driftSqfliteOpenConnection(file.path));
+LazyDatabase _openConnection() {
+  return LazyDatabase(() async {
+    final dbFolder = await getApplicationDocumentsDirectory();
+    final file = File(p.join(dbFolder.path, 'app.db'));
+    return NativeDatabase(file);
+  });
 }
