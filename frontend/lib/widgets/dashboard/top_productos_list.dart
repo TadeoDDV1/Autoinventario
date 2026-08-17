@@ -4,15 +4,6 @@ import '../../core/format/money.dart';
 import '../../models/sugerencia.dart';
 import 'dashboard_constants.dart';
 
-/// Lista compacta de los productos más vendidos del día.
-///
-/// Cada fila muestra:
-///   - Rank (🥇🥈🥉 o número) en círculo.
-///   - Nombre del producto (truncado si es largo).
-///   - Barra horizontal proporcional al total de venta.
-///   - Monto formateado a la derecha.
-///
-/// Se trunca a [maxItems] (default 5).
 class TopProductosList extends StatelessWidget {
   final List<TopProducto> productos;
   final int maxItems;
@@ -34,7 +25,7 @@ class TopProductosList extends StatelessWidget {
         padding: const EdgeInsets.all(DashboardSpacing.xl),
         decoration: BoxDecoration(
           color: theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(DashboardRadius.md),
+          borderRadius: BorderRadius.circular(20),
         ),
         child: Column(
           children: [
@@ -62,8 +53,11 @@ class TopProductosList extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(DashboardRadius.md),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+          width: 0.5,
+        ),
       ),
       child: Column(
         children: [
@@ -89,7 +83,7 @@ class TopProductosList extends StatelessWidget {
   }
 }
 
-class _TopProductoRow extends StatelessWidget {
+class _TopProductoRow extends StatefulWidget {
   final int rank;
   final TopProducto producto;
   final double maxTotal;
@@ -105,13 +99,44 @@ class _TopProductoRow extends StatelessWidget {
   });
 
   @override
+  State<_TopProductoRow> createState() => _TopProductoRowState();
+}
+
+class _TopProductoRowState extends State<_TopProductoRow>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _progressController;
+  late Animation<double> _progressAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _progressController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _progressAnimation = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _progressController, curve: Curves.easeOutCubic),
+    );
+    _progressController.forward();
+  }
+
+  @override
+  void dispose() {
+    _progressController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final ratio = maxTotal == 0 ? 0.0 : producto.totalVenta / maxTotal;
-    final isPodium = rank <= 3;
+    final ratio = widget.maxTotal == 0
+        ? 0.0
+        : widget.producto.totalVenta / widget.maxTotal;
+    final isPodium = widget.rank <= 3;
 
     return InkWell(
-      onTap: onTap,
+      onTap: widget.onTap,
+      borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.symmetric(
           horizontal: DashboardSpacing.md,
@@ -119,14 +144,14 @@ class _TopProductoRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            _RankBadge(rank: rank, isPodium: isPodium),
+            _RankBadge(rank: widget.rank, isPodium: isPodium),
             const SizedBox(width: DashboardSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    producto.nombre,
+                    widget.producto.nombre,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w500,
                     ),
@@ -136,20 +161,25 @@ class _TopProductoRow extends StatelessWidget {
                   const SizedBox(height: 4),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(2),
-                    child: LinearProgressIndicator(
-                      value: ratio,
-                      minHeight: 4,
-                      backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        isPodium
-                            ? theme.colorScheme.primary
-                            : theme.colorScheme.primary.withValues(alpha: 0.55),
-                      ),
+                    child: AnimatedBuilder(
+                      animation: _progressAnimation,
+                      builder: (context, child) {
+                        return LinearProgressIndicator(
+                          value: ratio * _progressAnimation.value,
+                          minHeight: 4,
+                          backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            isPodium
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.primary.withValues(alpha: 0.55),
+                          ),
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${producto.cantidad} uds',
+                    '${widget.producto.cantidad} uds',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.outline,
                       fontSize: 11,
@@ -160,7 +190,7 @@ class _TopProductoRow extends StatelessWidget {
             ),
             const SizedBox(width: DashboardSpacing.md),
             Text(
-              formatter.format(producto.totalVenta),
+              widget.formatter.format(widget.producto.totalVenta),
               style: theme.textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.bold,
               ),

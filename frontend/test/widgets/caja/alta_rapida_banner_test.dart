@@ -22,6 +22,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:ferreteria_app/database/app_database.dart'
+    hide Producto, Categoria;
+import 'package:ferreteria_app/database/database_provider.dart';
 import 'package:ferreteria_app/models/categoria.dart';
 import 'package:ferreteria_app/models/paginated_response.dart';
 import 'package:ferreteria_app/models/producto.dart';
@@ -124,6 +127,7 @@ class _FakeApiService implements ApiService {
 Widget _wrapCaja({required _FakeApiService api, Size? size}) {
   return ProviderScope(
     overrides: [
+      appDatabaseProvider.overrideWithValue(AppDatabase.test()),
       apiServiceProvider.overrideWithValue(api),
       // Evita que el CopilotPanel intente pegarle al backend real
       // (/ia/sugerencias) cuando el carrito tenga items. Devolvemos una
@@ -259,7 +263,7 @@ void main() {
           (tester) async {},
           skip: true, // reason: overflow pre-existente del layout mobile CajaScreen
         );
-      );
+      });
 
   // Sanity check del helper _boot (evita que el IDE marque "unused").
   testWidgets('Sanity: _boot monta CajaScreen sin throw', (tester) async {

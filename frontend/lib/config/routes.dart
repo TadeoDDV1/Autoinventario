@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../core/animations/app_animations.dart';
 import '../core/layout/breakpoints.dart';
-import '../core/theme/glass_tokens.dart';
 import '../core/widgets/atmospheric_background.dart';
-import '../core/widgets/glass_container.dart';
 import '../domain/enums.dart';
 import '../models/venta.dart';
 import '../providers/theme_provider.dart';
 import '../screens/chat/chat_screen.dart';
 import '../screens/chat/historial_chat_screen.dart';
-import '../widgets/ia/fuente_ia_badge.dart';
+import '../widgets/common/animated_nav_bar.dart';
+import '../widgets/common/sync_button.dart';
+import '../widgets/conectividad_badge.dart';
+import '../widgets/stock_alert_banner.dart';
 import '../screens/caja/caja_screen.dart';
 import '../screens/dashboard/dashboard_screen.dart';
 import '../screens/ventas/ticket_screen.dart';
@@ -21,12 +23,83 @@ import '../screens/inventario/producto_form_screen.dart';
 import '../screens/inventario/escanear_producto_screen.dart';
 import '../screens/inventario/entrada_screen.dart';
 import '../screens/inventario/historial_entradas_screen.dart';
-import '../widgets/conectividad_badge.dart';
-import '../widgets/stock_alert_banner.dart';
+import '../screens/configuracion/configuracion_screen.dart';
 import '../providers/modo_provider.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
+
+Page<dynamic> _slideUpPage(Widget child, LocalKey? key) {
+  return CustomTransitionPage(
+    key: key,
+    child: child,
+    transitionDuration: AppPageTransitions.defaultDuration,
+    reverseTransitionDuration: AppPageTransitions.fastDuration,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      final curvedAnimation = CurvedAnimation(
+        parent: animation,
+        curve: AppPageTransitions.defaultCurve,
+      );
+      return SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.15),
+          end: Offset.zero,
+        ).animate(curvedAnimation),
+        child: FadeTransition(
+          opacity: curvedAnimation,
+          child: child,
+        ),
+      );
+    },
+  );
+}
+
+Page<dynamic> _fadeSlidePage(Widget child, LocalKey? key) {
+  return CustomTransitionPage(
+    key: key,
+    child: child,
+    transitionDuration: AppPageTransitions.defaultDuration,
+    reverseTransitionDuration: AppPageTransitions.fastDuration,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      final curvedAnimation = CurvedAnimation(
+        parent: animation,
+        curve: AppPageTransitions.defaultCurve,
+      );
+      return SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0.1, 0),
+          end: Offset.zero,
+        ).animate(curvedAnimation),
+        child: FadeTransition(
+          opacity: curvedAnimation,
+          child: child,
+        ),
+      );
+    },
+  );
+}
+
+Page<dynamic> _scaleFadePage(Widget child, LocalKey? key) {
+  return CustomTransitionPage(
+    key: key,
+    child: child,
+    transitionDuration: AppPageTransitions.defaultDuration,
+    reverseTransitionDuration: AppPageTransitions.fastDuration,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      final curvedAnimation = CurvedAnimation(
+        parent: animation,
+        curve: AppPageTransitions.defaultCurve,
+      );
+      return ScaleTransition(
+        scale: Tween<double>(begin: 0.95, end: 1.0).animate(curvedAnimation),
+        child: FadeTransition(
+          opacity: curvedAnimation,
+          child: child,
+        ),
+      );
+    },
+  );
+}
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -39,14 +112,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           return AppShell(child: child);
         },
         routes: [
-          // Dashboard (inicio)
           GoRoute(
             path: '/dashboard',
             pageBuilder: (context, state) => const NoTransitionPage(
               child: DashboardScreen(),
             ),
           ),
-          // Modo Caja
           GoRoute(
             path: '/caja',
             pageBuilder: (context, state) => const NoTransitionPage(
@@ -56,19 +127,26 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: 'ticket',
                 parentNavigatorKey: _rootNavigatorKey,
-                builder: (context, state) {
+                pageBuilder: (context, state) {
                   final venta = state.extra as Venta;
-                  return TicketScreen(venta: venta);
+                  return _fadeSlidePage(
+                    TicketScreen(venta: venta),
+                    state.pageKey,
+                  );
                 },
               ),
               GoRoute(
                 path: 'historial',
                 parentNavigatorKey: _rootNavigatorKey,
-                builder: (context, state) => const HistorialVentasScreen(),
+                pageBuilder: (context, state) {
+                  return _fadeSlidePage(
+                    const HistorialVentasScreen(),
+                    state.pageKey,
+                  );
+                },
               ),
             ],
           ),
-          // Modo Inventario
           GoRoute(
             path: '/inventario',
             pageBuilder: (context, state) => const NoTransitionPage(
@@ -77,59 +155,109 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: 'predicciones',
-                pageBuilder: (context, state) => const NoTransitionPage(
-                  child: PrediccionesScreen(),
-                ),
+                pageBuilder: (context, state) {
+                  return _fadeSlidePage(
+                    const PrediccionesScreen(),
+                    state.pageKey,
+                  );
+                },
               ),
               GoRoute(
                 path: 'nuevo',
                 parentNavigatorKey: _rootNavigatorKey,
-                builder: (context, state) => const ProductoFormScreen(),
+                pageBuilder: (context, state) {
+                  return _slideUpPage(
+                    const ProductoFormScreen(),
+                    state.pageKey,
+                  );
+                },
               ),
               GoRoute(
                 path: 'nuevo-rapido',
                 parentNavigatorKey: _rootNavigatorKey,
-                builder: (context, state) => const ProductoFormScreen(
-                  mode: ProductoFormMode.rapido,
-                ),
+                pageBuilder: (context, state) {
+                  return _slideUpPage(
+                    const ProductoFormScreen(
+                      mode: ProductoFormMode.rapido,
+                    ),
+                    state.pageKey,
+                  );
+                },
               ),
               GoRoute(
                 path: 'escanear',
                 parentNavigatorKey: _rootNavigatorKey,
-                builder: (context, state) => const EscanearProductoScreen(),
+                pageBuilder: (context, state) {
+                  return _scaleFadePage(
+                    const EscanearProductoScreen(),
+                    state.pageKey,
+                  );
+                },
               ),
               GoRoute(
                 path: 'editar/:id',
                 parentNavigatorKey: _rootNavigatorKey,
-                builder: (context, state) {
+                pageBuilder: (context, state) {
                   final id = int.parse(state.pathParameters['id']!);
-                  return ProductoFormScreen(productoId: id);
+                  return _slideUpPage(
+                    ProductoFormScreen(productoId: id),
+                    state.pageKey,
+                  );
                 },
               ),
               GoRoute(
                 path: 'entrada',
                 parentNavigatorKey: _rootNavigatorKey,
-                builder: (context, state) => const EntradaScreen(),
+                pageBuilder: (context, state) {
+                  return _slideUpPage(
+                    const EntradaScreen(),
+                    state.pageKey,
+                  );
+                },
               ),
               GoRoute(
                 path: 'entradas',
                 parentNavigatorKey: _rootNavigatorKey,
-                builder: (context, state) => const HistorialEntradasScreen(),
+                pageBuilder: (context, state) {
+                  return _fadeSlidePage(
+                    const HistorialEntradasScreen(),
+                    state.pageKey,
+                  );
+                },
               ),
             ],
           ),
         ],
       ),
-      // Chat ejecutivo (full-screen, fuera del shell)
+      GoRoute(
+        path: '/configuracion',
+        parentNavigatorKey: _rootNavigatorKey,
+        pageBuilder: (context, state) {
+          return _slideUpPage(
+            const ConfiguracionScreen(),
+            state.pageKey,
+          );
+        },
+      ),
       GoRoute(
         path: '/chat',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const ChatScreen(),
+        pageBuilder: (context, state) {
+          return _fadeSlidePage(
+            const ChatScreen(),
+            state.pageKey,
+          );
+        },
         routes: [
           GoRoute(
             path: 'historial',
             parentNavigatorKey: _rootNavigatorKey,
-            builder: (context, state) => const HistorialChatScreen(),
+            pageBuilder: (context, state) {
+              return _fadeSlidePage(
+                const HistorialChatScreen(),
+                state.pageKey,
+              );
+            },
           ),
         ],
       ),
@@ -178,39 +306,25 @@ class _AppShellState extends ConsumerState<AppShell> {
     final isWide = Breakpoints.isDesktop(width);
     final selectedIndex = _getSelectedIndex(context);
     final stockAlertCount = ref.watch(stockAlertCountProvider);
-    final destinations = [
-      NavigationDestination(
-        icon: const Icon(Icons.point_of_sale_outlined),
-        selectedIcon: const Icon(Icons.point_of_sale),
+
+    final navTabs = [
+      const NavTab(
+        icon: Icons.point_of_sale_outlined,
+        selectedIcon: Icons.point_of_sale,
         label: 'Caja',
       ),
-      NavigationDestination(
-        icon: const Icon(Icons.dashboard_outlined),
-        selectedIcon: const Icon(Icons.dashboard),
+      const NavTab(
+        icon: Icons.dashboard_outlined,
+        selectedIcon: Icons.dashboard,
         label: 'Inicio',
       ),
-      NavigationDestination(
-        icon: Badge(
-          isLabelVisible: stockAlertCount > 0,
-          label: Text('$stockAlertCount'),
-          child: const Icon(Icons.inventory_2_outlined),
-        ),
-        selectedIcon: Badge(
-          isLabelVisible: stockAlertCount > 0,
-          label: Text('$stockAlertCount'),
-          child: const Icon(Icons.inventory_2),
-        ),
+      NavTab(
+        icon: Icons.inventory_2_outlined,
+        selectedIcon: Icons.inventory_2,
         label: 'Inventario',
+        badge: stockAlertCount > 0 ? '$stockAlertCount' : null,
       ),
     ];
-
-    final railDestinations = destinations
-        .map((d) => NavigationRailDestination(
-              icon: d.icon,
-              selectedIcon: d.selectedIcon,
-              label: Text(d.label),
-            ))
-        .toList();
 
     return Scaffold(
       body: Stack(
@@ -219,43 +333,46 @@ class _AppShellState extends ConsumerState<AppShell> {
           Row(
             children: [
               if (isWide)
-                GlassContainer(
-                  width: 80,
-                  height: double.infinity,
-                  borderRadius: 0,
-                  blur: GlassTokens.blurSmall,
-                  child: NavigationRail(
-                    selectedIndex: selectedIndex,
-                    onDestinationSelected: _onDestinationSelected,
-                    labelType: NavigationRailLabelType.all,
-                    backgroundColor: Colors.transparent,
-                    leading: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      child: Icon(
-                        Icons.hardware,
-                        size: 32,
-                        color: theme.colorScheme.primary,
-                      ),
+                AnimatedNavRail(
+                  selectedIndex: selectedIndex,
+                  onTabSelected: _onDestinationSelected,
+                  tabs: navTabs,
+                  leading: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Icon(
+                      Icons.hardware,
+                      size: 32,
+                      color: theme.colorScheme.primary,
                     ),
-                    trailing: Expanded(
-                      child: Align(
-                        alignment: Alignment.bottomCenter,
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: IconButton(
-                            onPressed: () =>
-                                ref.read(themeProvider.notifier).toggle(context),
-                            icon: Icon(_themeIcon(theme)),
-                            tooltip: _themeTooltip(theme),
-                          ),
+                  ),
+                  trailing: Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          onPressed: () =>
+                              ref.read(themeProvider.notifier).toggle(context),
+                          icon: Icon(_themeIcon(theme)),
+                          tooltip: _themeTooltip(theme),
                         ),
-                      ),
+                        const SyncButton(),
+                        IconButton(
+                          onPressed: () =>
+                              context.push('/configuracion'),
+                          icon: const Icon(Icons.settings),
+                          tooltip: 'Configuración del servidor',
+                        ),
+                      ],
                     ),
-                    destinations: railDestinations,
                   ),
                 ),
               if (isWide)
-                const VerticalDivider(thickness: 1, width: 1),
+                VerticalDivider(
+                  thickness: 0.5,
+                  width: 0.5,
+                  color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+                ),
               Expanded(
                 child: Column(
                   children: [
@@ -265,12 +382,47 @@ class _AppShellState extends ConsumerState<AppShell> {
                         child: StockAlertBanner(),
                       ),
                     if (!isWide)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        child: ConectividadBadge(),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        child: Row(
+                          children: [
+                            const Expanded(child: ConectividadBadge()),
+                            const SizedBox(width: 8),
+                            const SyncButton(),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              onPressed: () => context.push('/configuracion'),
+                              icon: const Icon(Icons.settings, size: 20),
+                              tooltip: 'Configuración del servidor',
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ],
+                        ),
                       ),
                     Expanded(
-                      child: widget.child,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        switchInCurve: Curves.easeOutCubic,
+                        switchOutCurve: Curves.easeInCubic,
+                        transitionBuilder: (child, animation) {
+                          return FadeTransition(
+                            opacity: animation,
+                            child: SlideTransition(
+                              position: Tween<Offset>(
+                                begin: const Offset(0.05, 0),
+                                end: Offset.zero,
+                              ).animate(animation),
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: KeyedSubtree(
+                          key: ValueKey(
+                            GoRouterState.of(context).uri.toString(),
+                          ),
+                          child: widget.child,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -281,29 +433,13 @@ class _AppShellState extends ConsumerState<AppShell> {
       ),
       bottomNavigationBar: isWide
           ? null
-          : GlassContainer(
-              borderRadius: GlassTokens.borderRadiusLarge,
-              blur: GlassTokens.blurMedium,
-              borderColor: Colors.transparent,
-              customDecoration: BoxDecoration(
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(GlassTokens.borderRadiusLarge),
-                  topRight: Radius.circular(GlassTokens.borderRadiusLarge),
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (stockAlertCount == 0) const ConectividadBadge(),
-                  NavigationBar(
-                    selectedIndex: selectedIndex,
-                    onDestinationSelected: _onDestinationSelected,
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    destinations: destinations,
-                  ),
-                ],
-              ),
+          : AnimatedBottomNavBar(
+              tabs: navTabs,
+              selectedIndex: selectedIndex,
+              onTabSelected: _onDestinationSelected,
+              borderRadius: BorderRadius.zero,
+              backgroundColor: theme.colorScheme.surface,
+              height: 76,
             ),
     );
   }
@@ -311,9 +447,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   IconData _themeIcon(ThemeData theme) {
     final mode = ref.watch(themeProvider);
     if (mode == AppThemeMode.system) {
-      return theme.brightness == Brightness.dark
-          ? Icons.brightness_auto
-          : Icons.brightness_auto;
+      return Icons.brightness_auto;
     }
     return mode == AppThemeMode.dark
         ? Icons.dark_mode

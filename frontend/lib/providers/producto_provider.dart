@@ -1,8 +1,46 @@
+import 'dart:convert' show jsonEncode;
+
+import 'package:drift/drift.dart' show Value;
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/producto.dart';
 import '../models/categoria.dart';
 import '../models/paginated_response.dart';
+import '../domain/enums.dart';
 import '../services/api_service.dart';
+import '../database/app_database.dart' as drift_db;
+import '../database/database_provider.dart';
+import '../core/errors/api_exception.dart';
+
+/// Convierte un Producto de la BD drift a un Producto del modelo de dominio.
+Producto _dbProductoToModel(drift_db.Producto p) {
+  return Producto(
+    id: p.id,
+    codigoBarras: p.codigoBarras,
+    nombre: p.nombre,
+    marca: p.marca,
+    descripcion: p.descripcion,
+    uso: p.uso,
+    precioCompra: p.precioCompra,
+    precioVenta: p.precioVenta,
+    precioMayoreo: p.precioMayoreo,
+    unidadMedida: UnidadMedida.fromValue(p.unidadMedida),
+    stockActual: p.stockActual,
+    stockMinimo: p.stockMinimo,
+    categoriaId: p.categoriaId,
+    ubicacion: p.ubicacion,
+    activo: p.activo,
+  );
+}
+
+/// Convierte una Categoría de la BD drift a un modelo de dominio.
+Categoria _dbCategoriaToModel(drift_db.Categoria c) {
+  return Categoria(
+    id: c.id,
+    nombre: c.nombre,
+    descripcion: c.descripcion,
+  );
+}
 
 final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
 
@@ -52,35 +90,200 @@ final productosProvider =
 class ProductosNotifier extends AsyncNotifier<PaginatedResponse<Producto>> {
   @override
   Future<PaginatedResponse<Producto>> build() async {
-    final api = ref.watch(apiServiceProvider);
     final search = ref.watch(productoSearchProvider);
     final categoriaId = ref.watch(productoCategoriaFilterProvider);
-    final page = ref.watch(productoPageProvider);
+    final database = ref.read(appDatabaseProvider);
 
-    return api.getProductos(
-      page: page,
-      search: search.isEmpty ? null : search,
-      categoriaId: categoriaId,
+    // 1. Intentar leer de la BD local primero
+    try {
+      List<drift_db.Producto> localProductos;
+      if (search.isNotEmpty) {
+        localProductos = await database.buscarProductos(search);
+      } else if (categoriaId != null) {
+        localProductos = await database.getProductosByCategoria(categoriaId);
+      } else {
+        localProductos = await database.getAllProductos();
+      }
+
+      if (localProductos.isNotEmpty) {
+        return PaginatedResponse(
+          data: localProductos.map(_dbProductoToModel).toList(),
+          total: localProductos.length,
+          page: 1,
+          pageSize: 200,
+          totalPages: 1,
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('DB read fallback: $e');
+    }
+
+    // 2. Si la BD está vacía, intentar del backend
+    try {
+      final api = ref.read(apiServiceProvider);
+      final result = await api.getProductos(
+        page: 1,
+        search: search.isEmpty ? null : search,
+        categoriaId: categoriaId,
+      );
+      return result;
+    } on ApiException {
+      return PaginatedResponse(
+        data: [],
+        total: 0,
+        page: 1,
+        pageSize: 20,
+        totalPages: 0,
+      );
+    }
+  }
+
+  /// Crea un producto: intenta el backend si hay red; si falla la conexión,
+  /// lo inserta localmente con un ID provisional y lo encola para sincronizar.
+  /// Devuelve el producto creado (con id provisional si fue offline).
+  Future<Producto> createProducto(Map<String, dynamic> data) async {
+    final api = ref.read(apiServiceProvider);
+
+    // Intentar backend
+    try {
+      final id = await api.createProducto(data);
+      final creado = await api.getProductoById(id);
+
+      // Persistir localmente para futuras lecturas offline
+      try {
+        final db = ref.read(appDatabaseProvider);
+        await db.insertProductos([_productoToCompanion(creado)]);
+      } catch (e) {
+        if (kDebugMode) debugPrint('createProducto: persist local falló: $e');
+      }
+
+      ref.invalidateSelf();
+      return creado;
+    } on ApiException catch (e) {
+      // Si es error de conexión → offline-first
+      if (_esErrorRed(e)) {
+        return await _crearProductoOffline(data);
+      }
+      // Otro error (validación, 4xx distinto a red): relanzar
+      rethrow;
+    } catch (e) {
+      // Cualquier otro error de red/Dio → offline
+      if (_esDioErrorRed(e)) {
+        return await _crearProductoOffline(data);
+      }
+      rethrow;
+    }
+  }
+
+  bool _esErrorRed(ApiException e) {
+    // ApiException.fromDio mapea timeouts/connectionError a mensajes tipo
+    // 'connectionTimeout', 'connectionError', 'receiveTimeout'.
+    final msg = e.message.toLowerCase();
+    return msg.contains('timeout') ||
+        msg.contains('connection') ||
+        msg.contains('network') ||
+        msg.contains('socket');
+  }
+
+  bool _esDioErrorRed(Object e) {
+    final s = e.toString().toLowerCase();
+    return s.contains('timeout') ||
+        s.contains('connection') ||
+        s.contains('network') ||
+        s.contains('socket') ||
+        s.contains('dioexception');
+  }
+
+  Future<Producto> _crearProductoOffline(Map<String, dynamic> data) async {
+    final db = ref.read(appDatabaseProvider);
+    final now = DateTime.now();
+    final clientId =
+        'prod-${now.millisecondsSinceEpoch}-${now.hashCode.toRadixString(16)}';
+
+    final companion = drift_db.ProductosCompanion.insert(
+      nombre: data['nombre'] as String,
+      precioCompra: (data['precio_compra'] as num?)?.toDouble() ?? 0,
+      precioVenta: (data['precio_venta'] as num?)?.toDouble() ?? 0,
+      unidadMedida:
+          (data['unidad_medida'] as String?) ?? UnidadMedida.pieza.value,
+      stockActual: (data['stock_actual'] as int?) ?? 0,
+      stockMinimo: (data['stock_minimo'] as int?) ?? 0,
+      activo: true,
+      createdAt: now,
+      updatedAt: now,
+      codigoBarras: Value(data['codigo_barras'] as String?),
+      marca: Value(data['marca'] as String?),
+      descripcion: Value(data['descripcion'] as String?),
+      uso: Value(data['uso'] as String?),
+      precioMayoreo: Value((data['precio_mayoreo'] as num?)?.toDouble()),
+      categoriaId: Value(data['categoria_id'] as int?),
+      ubicacion: Value(data['ubicacion'] as String?),
+    );
+
+    final idProvisional = await db.insertProductoLocal(companion);
+
+    // Encolar para sincronización posterior
+    await db.addProductoPendiente(drift_db.ProductosPendientesCompanion.insert(
+      clientId: clientId,
+      createdAt: now,
+      productoData: _jsonEncode(data),
+    ));
+
+    if (kDebugMode) {
+      debugPrint('createProducto offline: id=$idProvisional client=$clientId');
+    }
+
+    ref.invalidateSelf();
+
+    return Producto(
+      id: idProvisional,
+      codigoBarras: data['codigo_barras'] as String?,
+      nombre: data['nombre'] as String,
+      marca: data['marca'] as String?,
+      descripcion: data['descripcion'] as String?,
+      uso: data['uso'] as String?,
+      precioCompra: (data['precio_compra'] as num?)?.toDouble() ?? 0,
+      precioVenta: (data['precio_venta'] as num?)?.toDouble() ?? 0,
+      precioMayoreo: (data['precio_mayoreo'] as num?)?.toDouble(),
+      unidadMedida:
+          UnidadMedida.fromValue(data['unidad_medida'] as String?),
+      stockActual: (data['stock_actual'] as int?) ?? 0,
+      stockMinimo: (data['stock_minimo'] as int?) ?? 0,
+      categoriaId: data['categoria_id'] as int?,
+      ubicacion: data['ubicacion'] as String?,
+      activo: true,
     );
   }
 
-  /// Crea un producto vía POST /productos y devuelve el `Producto`
-  /// completo (refetch vía GET /productos/:id para tener `categoriaNombre`
-  /// y demás campos que el POST no incluye en la respuesta).
-  ///
-  /// Devuelve `Future<Producto>` (no `void`) para que callers como
-  /// `AltaRapidaSheet` (B2) puedan hacer `Navigator.pop(context, producto)`
-  /// con la entidad completa sin un round-trip extra al backend.
-  ///
-  /// El refetch es responsabilidad de este método — fuera de aquí nadie
-  /// debería llamar a `api.createProducto` + `api.getProductoById` por
-  /// separado.
-  Future<Producto> createProducto(Map<String, dynamic> data) async {
-    final api = ref.read(apiServiceProvider);
-    final id = await api.createProducto(data);
-    final creado = await api.getProductoById(id);
-    ref.invalidateSelf();
-    return creado;
+  String _jsonEncode(Map<String, dynamic> data) {
+    try {
+      return jsonEncode(data);
+    } catch (_) {
+      return '{}';
+    }
+  }
+
+  drift_db.ProductosCompanion _productoToCompanion(Producto p) {
+    final now = DateTime.now();
+    return drift_db.ProductosCompanion.insert(
+      nombre: p.nombre,
+      precioCompra: p.precioCompra,
+      precioVenta: p.precioVenta,
+      unidadMedida: p.unidadMedida.value,
+      stockActual: p.stockActual,
+      stockMinimo: p.stockMinimo,
+      activo: p.activo,
+      createdAt: now,
+      updatedAt: now,
+      id: Value(p.id),
+      codigoBarras: Value(p.codigoBarras),
+      marca: Value(p.marca),
+      descripcion: Value(p.descripcion),
+      uso: Value(p.uso),
+      precioMayoreo: Value(p.precioMayoreo),
+      categoriaId: Value(p.categoriaId),
+      ubicacion: Value(p.ubicacion),
+    );
   }
 
   Future<void> updateProducto(int id, Map<String, dynamic> data) async {
@@ -108,25 +311,32 @@ final categoriasProvider =
 class CategoriasNotifier extends AsyncNotifier<List<Categoria>> {
   @override
   Future<List<Categoria>> build() async {
-    final api = ref.watch(apiServiceProvider);
-    return api.getCategorias();
+    final database = ref.read(appDatabaseProvider);
+
+    // 1. Intentar de la BD local
+    try {
+      final localCategorias = await database.getAllCategorias();
+      if (localCategorias.isNotEmpty) {
+        return localCategorias.map(_dbCategoriaToModel).toList();
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('Categorias DB read fallback: $e');
+    }
+
+    // 2. Si vacía, intentar del backend
+    try {
+      final api = ref.read(apiServiceProvider);
+      return await api.getCategorias();
+    } on ApiException {
+      return [];
+    }
+  }
+
+  void refresh() {
+    ref.invalidateSelf();
   }
 }
 
-/// Construye el payload `Map<String, dynamic>` para crear un producto en modo
-/// rápido.
-///
-/// Usado por:
-/// - `ProductoFormScreen` con `ProductoFormMode.rapido` (alta inline desde Caja).
-/// - `AltaRapidaSheet` (B2, alta desde la grilla de inventario).
-///
-/// Defaults del modo rápido:
-/// - `stock_actual = 1` (la unidad que el operador está por vender).
-/// - `stock_minimo = 1` (umbral de reorden, igual al stock actual).
-/// - `precio_compra = 0` (desconocido al alta rápida; se completa luego).
-///
-/// El `codigo_barras` se normaliza con `.trim()` para evitar que valores como
-/// `' 1234 '` lleguen al backend con espacios y rompan el índice único.
 Map<String, dynamic> buildRapidoCreatePayload({
   required String nombre,
   required String codigoBarras,
@@ -141,3 +351,25 @@ Map<String, dynamic> buildRapidoCreatePayload({
     'stock_minimo': 1,
   };
 }
+
+/// Producto individual por ID desde la BD local (offline-first).
+/// Si no existe localmente, intenta la API como fallback.
+final productoByIdProvider =
+    FutureProvider.family<Producto?, int>((ref, id) async {
+  final database = ref.read(appDatabaseProvider);
+  try {
+    final local = await database.getProductoById(id);
+    if (local != null) {
+      return _dbProductoToModel(local);
+    }
+  } catch (e) {
+    if (kDebugMode) debugPrint('productoByIdProvider local: $e');
+  }
+  // Fallback a la API
+  try {
+    final api = ref.read(apiServiceProvider);
+    return await api.getProductoById(id);
+  } catch (_) {
+    return null;
+  }
+});

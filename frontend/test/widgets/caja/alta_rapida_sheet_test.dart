@@ -32,6 +32,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ferreteria_app/core/errors/api_exception.dart';
+import 'package:ferreteria_app/database/app_database.dart'
+    hide Producto, Categoria;
+import 'package:ferreteria_app/database/database_provider.dart';
 import 'package:ferreteria_app/models/producto.dart';
 import 'package:ferreteria_app/providers/producto_provider.dart';
 import 'package:ferreteria_app/services/api_service.dart';
@@ -116,6 +119,7 @@ bool _codigoReadOnly(WidgetTester tester) {
 Widget _wrap({required _FakeApiService api, String? codigoInicial}) {
   return ProviderScope(
     overrides: [
+      appDatabaseProvider.overrideWithValue(AppDatabase.test()),
       apiServiceProvider.overrideWithValue(api),
     ],
     child: MaterialApp(

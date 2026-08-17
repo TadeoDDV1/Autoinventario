@@ -59,7 +59,7 @@ class EventSourceClient {
   }
 
   Future<void> _startConnection(String path, Map<String, String>? headers) async {
-    final base = apiBaseUrl.replaceAll('/api/v1', '');
+    final base = apiBaseUrlSync.replaceAll('/api/v1', '');
     final uri = Uri.parse('$base$path');
 
     final request = await _client!.getUrl(uri);

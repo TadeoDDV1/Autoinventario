@@ -7,6 +7,7 @@ import '../../core/constants/api_constants.dart';
 import '../../core/constants/durations.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/format/money.dart';
+import '../../core/utils/test_environment.dart';
 import '../../models/producto.dart';
 import '../../providers/producto_provider.dart';
 import 'barcode_scanner_button.dart';
@@ -71,8 +72,10 @@ class _BarcodeInputState extends ConsumerState<BarcodeInput> {
   void initState() {
     super.initState();
     _focusNode = widget.externalFocusNode ?? FocusNode();
-    // Solo autofocus en desktop (en móvil abre el teclado y estorba)
-    if (!_esMovil) {
+    // Solo autofocus en desktop (en móvil abre el teclado y estorba).
+    // Se omite en tests para no dejar el cursor parpadeando (rompe
+    // `pumpAndSettle`).
+    if (!_esMovil && !isRunningTests) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _focusNode.requestFocus();
       });

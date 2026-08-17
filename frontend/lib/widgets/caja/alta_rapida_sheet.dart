@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/durations.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/utils/codigo_manual.dart';
+import '../../core/utils/test_environment.dart';
 import '../../models/producto.dart';
 import '../../providers/producto_provider.dart';
 
@@ -75,9 +76,10 @@ class _AltaRapidaSheetState extends ConsumerState<AltaRapidaSheet> {
     _precioFocus = FocusNode();
 
     // Autofocus en nombre después del primer frame (así el sheet ya
-    // está animado y el focus no se pierde).
+    // está animado y el focus no se pierde). Se omite en tests para
+    // no dejar el cursor parpadeando (rompe `pumpAndSettle`).
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _nombreFocus.requestFocus();
+      if (mounted && !isRunningTests) _nombreFocus.requestFocus();
     });
   }
 

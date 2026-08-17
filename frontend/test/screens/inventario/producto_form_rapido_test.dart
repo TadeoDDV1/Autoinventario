@@ -24,6 +24,8 @@ import 'package:ferreteria_app/models/producto.dart';
 import 'package:ferreteria_app/providers/producto_provider.dart';
 import 'package:ferreteria_app/screens/inventario/producto_form_screen.dart';
 import 'package:ferreteria_app/services/api_service.dart';
+import 'package:ferreteria_app/database/app_database.dart' show AppDatabase;
+import 'package:ferreteria_app/database/database_provider.dart';
 
 /// Fake mínimo de ApiService: registra llamadas a createProducto/updateProducto
 /// y devuelve datos stub. NO toca la red.
@@ -94,6 +96,7 @@ Widget _wrap({
       categoriasProvider.overrideWith(
         () => _FakeCategoriasNotifier(categorias ?? const <Categoria>[]),
       ),
+      appDatabaseProvider.overrideWithValue(AppDatabase.test()),
     ],
     child: MaterialApp(home: child),
   );
@@ -329,6 +332,7 @@ void main() {
               categoriasProvider.overrideWith(
                 () => _FakeCategoriasNotifier(const <Categoria>[]),
               ),
+              appDatabaseProvider.overrideWithValue(AppDatabase.test()),
             ],
             child: MaterialApp.router(routerConfig: router),
           ),

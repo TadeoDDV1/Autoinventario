@@ -179,8 +179,7 @@ class _EntradaScreenState extends ConsumerState<EntradaScreen> {
         data
             .where((p) =>
                 p.nombre.toLowerCase().contains(q) ||
-                (p.codigoBarras?.toLowerCase().contains(q) ?? false) ||
-                (p.sku?.toLowerCase().contains(q) ?? false))
+                (p.codigoBarras?.toLowerCase().contains(q) ?? false))
             .take(6),
       );
     }

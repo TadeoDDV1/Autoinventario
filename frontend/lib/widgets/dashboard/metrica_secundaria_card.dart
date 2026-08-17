@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/glass_tokens.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import '../../core/animations/app_animations.dart';
 import '../../core/widgets/glass_container.dart';
 import 'dashboard_constants.dart';
 
-/// Card de métrica secundaria. Más compacta que [MetricaPrincipalCard]:
-///   - Icono a la derecha (no a la izquierda).
-///   - Valor a 18pt w700.
-///   - Altura fija de DashboardSizes.cardSecundariaHeight.
-///   - Sin sombras pesadas — solo un borde sutil.
 class MetricaSecundariaCard extends StatelessWidget {
   final String titulo;
   final String valor;
   final String subtitulo;
   final IconData icon;
   final Color colorIcono;
+  final double? numericValue;
+  final String valorPrefix;
+  final String valorSuffix;
 
   const MetricaSecundariaCard({
     super.key,
@@ -22,6 +21,9 @@ class MetricaSecundariaCard extends StatelessWidget {
     required this.subtitulo,
     required this.icon,
     required this.colorIcono,
+    this.numericValue,
+    this.valorPrefix = '',
+    this.valorSuffix = '',
   });
 
   @override
@@ -30,8 +32,8 @@ class MetricaSecundariaCard extends StatelessWidget {
     return GlassContainer(
       height: DashboardSizes.cardSecundariaHeight,
       padding: const EdgeInsets.all(DashboardSpacing.md),
-      borderRadius: DashboardRadius.md,
-      blur: GlassTokens.blurSmall,
+      borderRadius: 20,
+      borderColor: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -49,21 +51,42 @@ class MetricaSecundariaCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Icon(icon, size: 18, color: colorIcono),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: colorIcono.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, size: 16, color: colorIcono),
+              ),
             ],
           ),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(
-              valor,
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: theme.colorScheme.onSurface,
-                height: 1.1,
-              ),
-            ),
+            child: numericValue != null
+                ? DashboardCounter(
+                    target: numericValue!,
+                    duration: const Duration(milliseconds: 1000),
+                    curve: Curves.easeOutCubic,
+                    prefix: valorPrefix,
+                    suffix: valorSuffix,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: theme.colorScheme.onSurface,
+                      height: 1.1,
+                    ),
+                  )
+                : Text(
+                    valor,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: theme.colorScheme.onSurface,
+                      height: 1.1,
+                    ),
+                  ),
           ),
           Text(
             subtitulo,

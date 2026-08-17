@@ -23,7 +23,7 @@ class ChatEjecutivoService {
   ChatEjecutivoService({Dio? dio})
       : _dio = dio ??
             Dio(BaseOptions(
-              baseUrl: apiBaseUrl,
+              baseUrl: apiBaseUrlSync,
               connectTimeout: const Duration(seconds: 8),
               receiveTimeout: const Duration(seconds: 12),
             ));

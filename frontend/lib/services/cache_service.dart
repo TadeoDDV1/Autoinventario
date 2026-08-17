@@ -20,6 +20,10 @@ class CacheService {
   static const _colaVentasKey = 'cola_ventas_pendientes';
   static const _lastSyncKey = 'last_sync_time';
 
+  final AppDatabase _db;
+
+  CacheService({AppDatabase? db}) : _db = db ?? AppDatabase();
+
   // --- PRODUCTOS ---
 
   /// Guarda la lista de productos en cache. Limita a 500 para no
@@ -62,9 +66,7 @@ class CacheService {
   /// Encola una venta pendiente. La venta lleva un clientId generado en
   /// el cliente para que el backend pueda reconciliar.
   Future<void> encolarVenta(VentaPendiente venta) async {
-    // Guardamos la venta pendiente en la tabla SQLite
-    final db = AppDatabase();
-    await db.addVentaPendiente(VentasPendientesCompanion(
+    await _db.addVentaPendiente(VentasPendientesCompanion(
       clientId: Value(venta.clientId),
       createdAt: Value(venta.createdAt),
       ventaData: Value(jsonEncode(venta.ventaData)),
@@ -74,8 +76,7 @@ class CacheService {
   }
 
   Future<List<VentaPendiente>> getColaVentas() async {
-    final db = AppDatabase();
-    final rows = await db.getVentasPendientes();
+    final rows = await _db.getVentasPendientes();
     return rows
         .map((row) => VentaPendiente(
               clientId: row.clientId,
@@ -90,10 +91,7 @@ class CacheService {
   /// clientIds estén en la lista.
   Future<void> marcarSincronizadas(List<String> clientIds) async {
     if (clientIds.isEmpty) return;
-    // Marca en la DB como sincronizada
-    final db = AppDatabase();
-    await db.markVentasSynced(clientIds);
-    // Actualiza la marca de tiempo de última sincronización
+    await _db.markVentasSynced(clientIds);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_lastSyncKey, DateTime.now().millisecondsSinceEpoch);
   }
@@ -141,7 +139,10 @@ class VentaPendiente {
   }
 }
 
-final cacheServiceProvider = Provider<CacheService>((ref) => CacheService());
+final cacheServiceProvider = Provider<CacheService>((ref) {
+  final db = ref.read(appDatabaseProvider);
+  return CacheService(db: db);
+});
 
 /// Provider reactivo para el conteo de ventas pendientes en cola.
 final colaVentasCountProvider = FutureProvider.autoDispose<int>((ref) async {

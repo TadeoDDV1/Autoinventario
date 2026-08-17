@@ -117,26 +117,23 @@ class _ProductoExpandibleState extends State<ProductoExpandible> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (p.marca != null ||
-                  p.ubicacion != null ||
-                  p.sku != null) ...[
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    if (p.marca != null)
-                      _detailChip(theme, Icons.business_center_outlined,
-                          'Marca: ${p.marca}'),
-                    if (p.ubicacion != null)
-                      _detailChip(theme, Icons.place_outlined,
-                          'Ubicación: ${p.ubicacion}'),
-                    if (p.sku != null)
-                      _detailChip(theme, Icons.qr_code_2, 'SKU: ${p.sku}'),
-                  ],
-                ),
-                const SizedBox(height: 8),
-              ],
+               if (p.marca != null ||
+                   p.ubicacion != null) ...[
+                 const SizedBox(height: 4),
+                 Wrap(
+                   spacing: 8,
+                   runSpacing: 4,
+                   children: [
+                     if (p.marca != null)
+                       _detailChip(theme, Icons.business_center_outlined,
+                           'Marca: ${p.marca}'),
+                     if (p.ubicacion != null)
+                       _detailChip(theme, Icons.place_outlined,
+                           'Ubicación: ${p.ubicacion}'),
+                   ],
+                 ),
+                 const SizedBox(height: 8),
+               ],
               if (descBD || conocimiento != null) ...[
                 const SizedBox(height: 4),
                 Text(

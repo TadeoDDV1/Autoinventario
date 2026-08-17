@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:drift/drift.dart' show Value;
 import '../../core/constants/durations.dart';
-import '../../core/errors/api_exception.dart';
 import '../../core/format/money.dart';
+import '../../database/app_database.dart';
 import '../../models/venta.dart';
 import '../../providers/producto_provider.dart';
 import '../../providers/ia_provider.dart';
 import '../../providers/venta_provider.dart';
+import '../../services/sync_service.dart';
+import '../../database/database_provider.dart';
 
 /// Panel del carrito, simplificado. Aparece fijo en mobile y en el side
 /// panel del desktop.
@@ -88,8 +92,7 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
     setState(() => _procesando = true);
 
     try {
-      final api = ref.read(apiServiceProvider);
-      final response = await api.createVenta({
+      final ventaData = {
         'detalles': detallesJson,
         'subtotal': subtotal,
         'iva': iva,
@@ -98,27 +101,46 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
         'monto_recibido':
             _metodoPago == MetodoPago.efectivo ? _montoRecibido : null,
         'cambio': cambio,
-      });
+        '_client_id': _generateClientId(),
+      };
 
-      final ventaId = (response['id'] as num?)?.toInt();
-      final folio = response['folio'] as String? ?? '—';
-
-      ref.read(carritoProvider.notifier).vaciar();
-      ref.invalidate(productosProvider);
-      ref.invalidate(dashboardProvider);
-      ref.invalidate(ventasHoyPorHoraProvider);
-      ref.invalidate(ventasRecientesProvider);
+      final sync = ref.read(conectividadProvider.notifier);
+      final result = await sync.intentarVenta(ventaData);
 
       if (!mounted) return;
-      _montoController.clear();
-      _mostrarSnackExito(folio: folio, cambio: cambio, ventaId: ventaId);
-    } on ApiException catch (e) {
-      if (mounted) {
-        _mostrarSnackError(
-          e.isStockInsuficiente
-              ? 'Stock insuficiente para uno de los productos'
-              : 'Error al registrar venta: ${e.message}',
+
+      if (result.ok) {
+        // Guardar la venta en VentasLocal (siempre, online u offline)
+        await _guardarVentaLocal(
+          detallesJson: detallesJson,
+          subtotal: subtotal,
+          iva: iva,
+          total: total,
+          metodoPago: _metodoPago.value,
+          montoRecibido:
+              _metodoPago == MetodoPago.efectivo ? _montoRecibido : null,
+          cambio: cambio,
+          result: result,
+          clientId: ventaData['_client_id'] as String,
         );
+
+        ref.read(carritoProvider.notifier).vaciar();
+        ref.invalidate(productosProvider);
+        ref.invalidate(dashboardProvider);
+        ref.invalidate(ventasHoyPorHoraProvider);
+        ref.invalidate(ventasRecientesProvider);
+
+        _montoController.clear();
+        if (result.encolado) {
+          // Decrementar stock localmente para cada producto de la venta
+          await _decrementarStockLocal(detallesJson);
+          _mostrarSnackOffline();
+        } else {
+          _mostrarSnackExito(
+              folio: result.folio ?? '—', cambio: cambio, ventaId: result.id);
+        }
+      } else {
+        _mostrarSnackError(result.mensaje ?? 'Error al registrar venta');
       }
     } catch (e) {
       if (mounted) {
@@ -134,6 +156,7 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
     double? cambio,
     int? ventaId,
   }) {
+    HapticFeedback.heavyImpact();
     final cambioTxt = (cambio != null && cambio > 0)
         ? ' · Cambio ${money.format(cambio)}'
         : '';
@@ -160,7 +183,19 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
             ? SnackBarAction(
                 label: 'Ver ticket',
                 textColor: Colors.white,
-                onPressed: () => context.push('/ticket/$ventaId'),
+                onPressed: () {
+                  final carrito = <DetalleVenta>[];
+                  // El ticket se muestra con los datos básicos
+                  context.push('/caja/ticket', extra: Venta(
+                    id: ventaId,
+                    folio: folio,
+                    detalles: carrito,
+                    subtotal: 0,
+                    iva: 0,
+                    total: 0,
+                    metodoPago: 'efectivo',
+                  ));
+                },
               )
             : null,
       ),
@@ -168,6 +203,7 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
   }
 
   void _mostrarSnackError(String mensaje) {
+    HapticFeedback.vibrate();
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
@@ -189,6 +225,123 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  void _mostrarSnackOffline() {
+    HapticFeedback.mediumImpact();
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.cloud_off, color: Colors.white, size: 20),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Sin conexión — venta guardada. Se sincroniza al reconectar.',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.orange.shade800,
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  String _generateClientId() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return 'venta-$now-${now.hashCode.toRadixString(16)}';
+  }
+
+  Future<void> _decrementarStockLocal(List<dynamic> detalles) async {
+    try {
+      final db = ref.read(appDatabaseProvider);
+      for (final d in detalles) {
+        final productoId = d['producto_id'] as int?;
+        final cantidad = d['cantidad'] as int?;
+        if (productoId != null && cantidad != null && cantidad > 0) {
+          await db.decrementarStock(productoId, cantidad);
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('decrementarStockLocal error: $e');
+    }
+  }
+
+  /// Guarda la venta en la tabla local VentasLocal + VentasDetalleLocal.
+  /// Funciona tanto para ventas online (con ID real del servidor) como
+  /// offline (con ID temporal negativo).
+  Future<void> _guardarVentaLocal({
+    required List<dynamic> detallesJson,
+    required double subtotal,
+    required double iva,
+    required double total,
+    required String metodoPago,
+    required double? montoRecibido,
+    required double? cambio,
+    required dynamic result,
+    required String clientId,
+  }) async {
+    try {
+      final db = ref.read(appDatabaseProvider);
+      final ahora = DateTime.now();
+
+      // ID de la venta: real del servidor (online) o temporal negativo (offline)
+      final int ventaId;
+      final String folio;
+      final bool synced;
+
+      if (result.encolado) {
+        // Offline: ID temporal negativo, folio provisional
+        ventaId = -(ahora.millisecondsSinceEpoch % 1000000);
+        folio = 'OFFLINE-${ahora.millisecondsSinceEpoch}';
+        synced = false;
+      } else {
+        // Online: ID real del servidor
+        ventaId = result.id ?? -(ahora.millisecondsSinceEpoch % 1000000);
+        folio = result.folio ?? 'VENT-$ventaId';
+        synced = true;
+      }
+
+      // Construir detalles companion
+      final detallesCompanion = <VentasDetalleLocalCompanion>[];
+      for (final d in detallesJson) {
+        detallesCompanion.add(VentasDetalleLocalCompanion(
+          ventaId: Value(ventaId),
+          productoId: Value(d['producto_id'] as int),
+          nombreProducto: Value(''),
+          precioUnitario: Value((d['precio_unitario'] as num).toDouble()),
+          cantidad: Value(d['cantidad'] as int),
+          subtotal: Value((d['subtotal'] as num).toDouble()),
+        ));
+      }
+
+      // Insertar venta + detalles en una transacción atómica
+      await db.insertVentaConDetalle(
+        VentasLocalCompanion(
+          id: Value(ventaId),
+          folio: Value(folio),
+          clientId: Value(clientId),
+          fecha: Value(ahora),
+          subtotal: Value(subtotal),
+          iva: Value(iva),
+          total: Value(total),
+          metodoPago: Value(metodoPago),
+          montoRecibido: Value(montoRecibido),
+          cambio: Value(cambio),
+          synced: Value(synced),
+        ),
+        detallesCompanion,
+      );
+
+      if (kDebugMode) debugPrint('Venta guardada localmente: id=$ventaId, folio=$folio, synced=$synced');
+    } catch (e) {
+      if (kDebugMode) debugPrint('guardarVentaLocal error: $e');
+    }
   }
 
   /// Abre un bottom-sheet con el flujo de cobro rápido disparado por Ctrl+P.
@@ -284,22 +437,20 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
 
         if (carrito.isEmpty)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Column(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.shopping_cart_outlined,
-                    size: 40, color: theme.colorScheme.outline),
-                const SizedBox(height: 8),
-                Text(
-                  'Carrito vacío',
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(color: theme.colorScheme.outline),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Escanea o toca un producto del grid',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.outline),
+                    size: 24, color: theme.colorScheme.outline),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    'Carrito vacío • escanea o toca un producto del grid',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.outline),
+                  ),
                 ),
               ],
             ),

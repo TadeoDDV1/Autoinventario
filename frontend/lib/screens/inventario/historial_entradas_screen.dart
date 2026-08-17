@@ -557,11 +557,15 @@ class EntradaDetalleSheet extends ConsumerWidget {
                 const BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: async.when(
-            data: (e) => _DetalleContent(
-              entrada: e,
-              scrollController: scrollController,
-              onCopiarFolio: () => _copiarFolio(context, e.folio),
-            ),
+            data: (e) => e == null
+                ? _errorView(theme, 'Entrada no encontrada', () {
+                    ref.invalidate(entradaByIdProvider(entradaId));
+                  })
+                : _DetalleContent(
+                    entrada: e,
+                    scrollController: scrollController,
+                    onCopiarFolio: () => _copiarFolio(context, e.folio),
+                  ),
             loading: () => _loadingView(theme),
             error: (err, _) => _errorView(theme, err, () {
               ref.invalidate(entradaByIdProvider(entradaId));

@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../database/database_provider.dart';
+import '../domain/enums.dart';
 import '../models/producto.dart';
 import '../models/venta.dart';
 import 'caja_sesion_service_provider.dart';
@@ -65,9 +67,36 @@ class CarritoNotifier extends Notifier<List<CarritoItem>> {
       final prefs = await SharedPreferences.getInstance();
       final carritoJson = prefs.getString(_carritoKey);
       if (carritoJson == null) return;
-      final api = ref.read(apiServiceProvider);
-      final productosResponse = await api.getProductos(pageSize: 100);
-      final productos = productosResponse.data;
+
+      // Intentar leer productos de la BD local primero (offline-first)
+      List<Producto> productos;
+      try {
+        final database = ref.read(appDatabaseProvider);
+        final localProductos = await database.getAllProductos();
+        productos = localProductos.map((p) => Producto(
+          id: p.id,
+          codigoBarras: p.codigoBarras,
+          nombre: p.nombre,
+          marca: p.marca,
+          descripcion: p.descripcion,
+          uso: p.uso,
+          precioCompra: p.precioCompra,
+          precioVenta: p.precioVenta,
+          precioMayoreo: p.precioMayoreo,
+          unidadMedida: UnidadMedida.fromValue(p.unidadMedida),
+          stockActual: p.stockActual,
+          stockMinimo: p.stockMinimo,
+          categoriaId: p.categoriaId,
+          ubicacion: p.ubicacion,
+          activo: p.activo,
+        )).toList();
+      } catch (_) {
+        // Si la BD falla, intentar de la API
+        final api = ref.read(apiServiceProvider);
+        final productosResponse = await api.getProductos(pageSize: 100);
+        productos = productosResponse.data;
+      }
+
       final List<dynamic> decoded = jsonDecode(carritoJson);
       final items = decoded
           .map((json) =>
@@ -244,8 +273,50 @@ final carritoCantidadProvider = Provider<int>((ref) {
 });
 
 final ventasProvider = FutureProvider<List<Venta>>((ref) async {
-  final api = ref.read(apiServiceProvider);
-  return api.getVentas();
+  // Leer TODO de la BD local (fuente de verdad offline-first)
+  try {
+    final database = ref.read(appDatabaseProvider);
+    final ventasLocal = await database.getAllVentas(limit: 500);
+    if (ventasLocal.isEmpty) {
+      // Si no hay ventas en BD local, intentar cola de pendientes
+      final pendientes = await database.getVentasPendientes();
+      return pendientes.map((p) => Venta(
+        id: null,
+        folio: 'PENDIENTE',
+        detalles: [],
+        subtotal: p.total / 1.16,
+        iva: p.total - (p.total / 1.16),
+        total: p.total,
+        metodoPago: 'efectivo',
+        fecha: p.createdAt,
+      )).toList();
+    }
+    final result = <Venta>[];
+    for (final v in ventasLocal) {
+      final detallesData = await database.getDetallesByVenta(v.id);
+      result.add(Venta(
+        id: v.id,
+        folio: v.folio,
+        detalles: detallesData.map((d) => DetalleVenta(
+          productoId: d.productoId,
+          nombreProducto: d.nombreProducto,
+          precioUnitario: d.precioUnitario,
+          cantidad: d.cantidad,
+          subtotal: d.subtotal,
+        )).toList(),
+        subtotal: v.subtotal,
+        iva: v.iva,
+        total: v.total,
+        metodoPago: v.metodoPago,
+        montoRecibido: v.montoRecibido,
+        cambio: v.cambio,
+        fecha: v.fecha,
+      ));
+    }
+    return result;
+  } catch (_) {
+    return const [];
+  }
 });
 
 /// Extensión para setear cantidad sin pasar por el server.

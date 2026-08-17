@@ -3,7 +3,6 @@ import '../domain/enums.dart';
 class Producto {
   final int id;
   final String? codigoBarras;
-  final String? sku;
   final String nombre;
   final String? marca;
   final String? descripcion;
@@ -17,12 +16,10 @@ class Producto {
   final int? categoriaId;
   final String? ubicacion;
   final bool activo;
-  final String? categoriaNombre;
 
   const Producto({
     required this.id,
     this.codigoBarras,
-    this.sku,
     required this.nombre,
     this.marca,
     this.descripcion,
@@ -36,14 +33,12 @@ class Producto {
     this.categoriaId,
     this.ubicacion,
     required this.activo,
-    this.categoriaNombre,
   });
 
   factory Producto.fromJson(Map<String, dynamic> json) {
     return Producto(
       id: json['id'] as int,
       codigoBarras: json['codigo_barras'] as String?,
-      sku: json['sku'] as String?,
       nombre: json['nombre'] as String,
       marca: json['marca'] as String?,
       descripcion: json['descripcion'] as String?,
@@ -57,14 +52,12 @@ class Producto {
       uso: json['uso'] as String?,
       ubicacion: json['ubicacion'] as String?,
       activo: json['activo'] as bool,
-      categoriaNombre: json['categoria_nombre'] as String?,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'codigo_barras': codigoBarras,
-      'sku': sku,
       'nombre': nombre,
       'marca': marca,
       'descripcion': descripcion,

@@ -11,7 +11,6 @@ import '../../core/theme/glass_tokens.dart';
 import '../../core/widgets/atmospheric_background.dart';
 import '../../core/widgets/glass_container.dart';
 import '../../providers/producto_provider.dart';
-import '../../services/api_service.dart';
 import '../../services/chat_ejecutivo_service.dart' show ChatEjecutivoService, SugerenciaProducto;
 
 /// Pantalla de "Escanear y Registrar" producto nuevo.
@@ -232,7 +231,6 @@ class _EscanearProductoScreenState extends ConsumerState<EscanearProductoScreen>
     if (!_formKey.currentState!.validate()) return;
     setState(() => _procesando = true);
     try {
-      final api = ref.read(apiServiceProvider);
       final data = <String, dynamic>{
         'codigo_barras': _codigoEscaneado,
         'nombre': _nombreController.text.trim(),
@@ -247,10 +245,10 @@ class _EscanearProductoScreenState extends ConsumerState<EscanearProductoScreen>
       if (_categoriaId != null) {
         data['categoria_id'] = _categoriaId;
       }
-      final id = await api.createProducto(data);
+      final creado = await ref.read(productosProvider.notifier).createProducto(data);
       if (!mounted) return;
       setState(() {
-        _productoCreadoId = id;
+        _productoCreadoId = creado.id;
         _productoCreadoNombre = _nombreController.text.trim();
         _step = _Step.exito;
         _procesando = false;

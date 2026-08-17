@@ -119,28 +119,7 @@ class ProductoCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    if (producto.categoriaNombre != null) ...[
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primaryContainer
-                                .withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            producto.categoriaNombre!,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onPrimaryContainer,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+
                     if (producto.codigoBarras != null ||
                         producto.marca != null ||
                         producto.ubicacion != null) ...[

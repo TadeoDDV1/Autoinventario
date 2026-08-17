@@ -129,11 +129,19 @@ class ApiService {
   Future<List<Venta>> getVentas({
     int page = 1,
     int pageSize = ApiConstants.maxPageSize,
+    String? desde,
+    String? hasta,
   }) async {
     return _request(() async {
+      final queryParameters = <String, dynamic>{
+        'page': page,
+        'page_size': pageSize,
+      };
+      if (desde != null) queryParameters['desde'] = desde;
+      if (hasta != null) queryParameters['hasta'] = hasta;
       final response = await _dio.get(
         '/ventas',
-        queryParameters: {'page': page, 'page_size': pageSize},
+        queryParameters: queryParameters,
       );
       final data = response.data as Map<String, dynamic>;
       final list = data['data'] as List<dynamic>;

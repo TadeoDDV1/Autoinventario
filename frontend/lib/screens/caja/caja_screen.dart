@@ -16,6 +16,7 @@ import '../../widgets/caja/alta_rapida_sheet.dart';
 import '../../widgets/caja/product_tile.dart';
 import '../../widgets/caja/quick_cart_summary.dart';
 import '../../widgets/caja/sticky_search_bar.dart';
+import '../../widgets/common/sync_button.dart';
 import '../../widgets/ia/ia_chat_bubble.dart';
 
 class _ClearCartIntent extends Intent {
@@ -63,9 +64,6 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
   final GlobalKey<QuickCartSummaryState> _cartKey =
       GlobalKey<QuickCartSummaryState>();
 
-  /// Bloque B — Task B3: código del último scan que NO se encontró. Mientras
-  /// esté seteado, mostramos un banner arriba del BarcodeInput con CTA
-  /// "Alta rápida" para que el operador pueda reintentar sin re-escanear.
   String? _ultimoCodigoNoRegistrado;
   Timer? _bannerTimer;
 
@@ -85,7 +83,6 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
     super.dispose();
   }
 
-  /// Bloque B — Task B3: setea el banner y arma un timer de auto-clear a 30s.
   void _setUltimoCodigoNoRegistrado(String codigo) {
     _bannerTimer?.cancel();
     setState(() => _ultimoCodigoNoRegistrado = codigo);
@@ -96,7 +93,6 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
     });
   }
 
-  /// Bloque B — Task B3: descarta el banner manualmente.
   void _limpiarUltimoCodigoNoRegistrado() {
     _bannerTimer?.cancel();
     if (_ultimoCodigoNoRegistrado != null) {
@@ -105,39 +101,23 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
   }
 
   void _onProductoScan(dynamic producto) {
-    // B3: un scan exitoso limpia el banner de "no registrado".
     _limpiarUltimoCodigoNoRegistrado();
     ref.read(carritoProvider.notifier).agregarProducto(producto);
-    _showSnackBar('${producto.nombre} agregado ✓', Colors.green);
+    _showSnackBar('${producto.nombre} agregado ��', Colors.green);
   }
 
   void _onScanError(String mensaje) {
     _showSnackBar(mensaje, Colors.orange);
   }
 
-  /// Bloque B — Task B1/B2/B3: el usuario escaneó/escribió un código que NO
-  /// existe en el backend. Abre el `AltaRapidaSheet` como bottom sheet Y
-  /// muestra un banner persistente por si el operador quiere reintentar
-  /// el alta más tarde sin re-escanear.
   Future<void> _onProductoNoRegistrado(String codigo) async {
     _setUltimoCodigoNoRegistrado(codigo);
     final nuevo = await _abrirAltaRapida(codigo: codigo);
     if (nuevo != null && mounted) {
-      // Alta exitosa → limpia el banner.
       _limpiarUltimoCodigoNoRegistrado();
     }
-    // Si canceló, el banner persiste (Timer de 30s lo limpia solo).
   }
 
-  /// Abre el sheet de alta rápida con un código inicial opcional.
-  ///
-  /// Usado por:
-  /// - `_onProductoNoRegistrado(codigo)` cuando el barcode no encuentra
-  ///   el producto (B1).
-  /// - El atajo `Ctrl+M` para crear un producto nuevo sin escaneo previo.
-  ///
-  /// Devuelve el `Producto` creado si el alta fue exitosa, o `null` si el
-  /// operador canceló el sheet (B3 usa esto para limpiar el banner).
   Future<Producto?> _abrirAltaRapida({String? codigo}) async {
     final nuevo = await showModalBottomSheet<Producto?>(
       context: context,
@@ -146,7 +126,7 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
     );
     if (nuevo != null && mounted) {
       ref.read(carritoProvider.notifier).agregarProducto(nuevo);
-      _showSnackBar('${nuevo.nombre} creado y agregado ✓', Colors.green);
+      _showSnackBar('${nuevo.nombre} creado y agregado ��', Colors.green);
     }
     return nuevo;
   }
@@ -190,7 +170,6 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
             _NuevoProductoIntent(),
         const SingleActivator(LogicalKeyboardKey.keyP, control: true):
             _OpenPagoIntent(),
-        // Bloque B — Task B2: alta rápida inline (3 campos) sin escanear.
         const SingleActivator(LogicalKeyboardKey.keyM, control: true):
             _AltaRapidaIntent(),
       },
@@ -322,7 +301,6 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
     );
   }
 
-  /// Header slim M3 sólido (sin glass, sin blur).
   Widget _buildHeader(ThemeData theme) {
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -340,11 +318,18 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
-              Icon(
-                Icons.point_of_sale,
-                color: theme.colorScheme.primary,
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.point_of_sale,
+                  color: theme.colorScheme.primary,
+                ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Text(
                 'MODO CAJA',
                 style: theme.textTheme.titleMedium?.copyWith(
@@ -352,6 +337,8 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
                   letterSpacing: 1.2,
                 ),
               ),
+              const SizedBox(width: 12),
+              const SyncChip(),
               const Spacer(),
               TextButton.icon(
                 onPressed: () => context.go('/caja/historial'),
@@ -365,10 +352,6 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
     );
   }
 
-  /// Layout mobile v2: 3 secciones sticky.
-  ///   1. StickySearchBar arriba.
-  ///   2. Grid de productos scrollable en el centro.
-  ///   3. QuickCartSummary siempre fijo abajo.
   Widget _buildMobileLayout(ThemeData theme, AsyncValue productosAsync) {
     return Column(
       children: [
@@ -395,8 +378,6 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
     );
   }
 
-  /// Layout desktop: buscador arriba + lista vertical de items del carrito.
-  /// (Mantiene diseño previo por compatibilidad.)
   Widget _buildProductAreaDesktop(
     ThemeData theme,
     AsyncValue productosAsync,
@@ -457,6 +438,14 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
                     final item = carrito[index];
                     return Card(
                       margin: const EdgeInsets.only(bottom: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(
+                          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+                          width: 0.5,
+                        ),
+                      ),
+                      elevation: 0,
                       child: Padding(
                         padding: const EdgeInsets.all(12),
                         child: Row(
@@ -473,8 +462,7 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
                                 '${item.cantidad}',
                                 style: theme.textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.bold,
-                                  color:
-                                      theme.colorScheme.onPrimaryContainer,
+                                  color: theme.colorScheme.onPrimaryContainer,
                                 ),
                               ),
                             ),
@@ -485,20 +473,16 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
                                 children: [
                                   Text(
                                     item.producto.nombre,
-                                    style:
-                                        theme.textTheme.bodyMedium?.copyWith(
+                                    style: theme.textTheme.bodyMedium?.copyWith(
                                       fontWeight: FontWeight.w600,
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   Text(
-                                    formatter
-                                        .format(item.producto.precioVenta),
-                                    style:
-                                        theme.textTheme.bodySmall?.copyWith(
-                                      color:
-                                          theme.colorScheme.onSurfaceVariant,
+                                    formatter.format(item.producto.precioVenta),
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
                                     ),
                                   ),
                                 ],
@@ -521,11 +505,44 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
     );
   }
 
-  /// Grid de productos (solo mobile): tap = +1, longPress = -1.
   Widget _buildProductGrid(AsyncValue productosAsync) {
+    final theme = Theme.of(context);
     return productosAsync.when(
       data: (paginated) {
         final productos = paginated.data;
+        if (productos.isEmpty) {
+          return Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.qr_code_scanner,
+                    size: 40,
+                    color: theme.colorScheme.primary.withValues(alpha: 0.6),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Escanea un producto',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Usa la cámara del celular,\nel lector de códigos, o escribe el código arriba',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
         return GridView.builder(
           padding: const EdgeInsets.all(12),
           gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -555,7 +572,6 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
   }
 }
 
-/// Banner de "código no registrado" — sólido, no glass.
 class _NoRegistradoBanner extends StatelessWidget {
   final String codigo;
   final VoidCallback onTapAlta;
@@ -591,11 +607,8 @@ class _NoRegistradoBanner extends StatelessWidget {
                 ),
               ),
             ),
-            TextButton(
+            FilledButton.tonal(
               onPressed: onTapAlta,
-              style: TextButton.styleFrom(
-                foregroundColor: theme.colorScheme.onErrorContainer,
-              ),
               child: const Text('Alta rápida'),
             ),
             IconButton(

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:ferreteria_app/database/app_database.dart'
+    hide Producto, Categoria;
+import 'package:ferreteria_app/database/database_provider.dart';
 import 'package:ferreteria_app/models/categoria.dart';
 import 'package:ferreteria_app/models/paginated_response.dart';
 import 'package:ferreteria_app/models/producto.dart';
@@ -33,6 +36,7 @@ void main() {
     final api = FakeApi();
     await tester.pumpWidget(ProviderScope(
       overrides: [
+        appDatabaseProvider.overrideWithValue(AppDatabase.test()),
         apiServiceProvider.overrideWithValue(api),
         copilotSugerenciasProvider.overrideWith((ref) async => const SugerenciasResponse(sugerencias: [], fuente: 't')),
       ],

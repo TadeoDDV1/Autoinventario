@@ -1,14 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/glass_tokens.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import '../../core/animations/app_animations.dart';
 import '../../core/widgets/glass_container.dart';
 import 'dashboard_constants.dart';
 
-/// Hero card: la métrica principal del dashboard (Ventas hoy).
-/// Diseño:
-///   - Borde izquierdo acentuado de 4pt en color primario (clipado).
-///   - Valor a 32pt w800.
-///   - Subtítulo con icono + texto de soporte.
-///   - Padding generoso (20).
 class MetricaPrincipalCard extends StatelessWidget {
   final String titulo;
   final String valor;
@@ -17,6 +12,9 @@ class MetricaPrincipalCard extends StatelessWidget {
   final IconData icon;
   final Color colorPrimario;
   final Widget? trailing;
+  final double? numericValue;
+  final String valorPrefix;
+  final String valorSuffix;
 
   const MetricaPrincipalCard({
     super.key,
@@ -27,22 +25,34 @@ class MetricaPrincipalCard extends StatelessWidget {
     required this.icon,
     required this.colorPrimario,
     this.trailing,
+    this.numericValue,
+    this.valorPrefix = '',
+    this.valorSuffix = '',
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return GlassContainer(
-      borderRadius: DashboardRadius.lg,
-      blur: GlassTokens.blurSmall,
+      borderRadius: 24,
+      borderColor: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
       child: IntrinsicHeight(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(width: 4, color: colorPrimario),
+            Container(
+              width: 4,
+              decoration: BoxDecoration(
+                color: colorPrimario,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(24),
+                  bottomLeft: Radius.circular(24),
+                ),
+              ),
+            ),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.all(DashboardSpacing.xl - 4),
+                padding: const EdgeInsets.all(20),
                 child: Row(
                   children: [
                     Expanded(
@@ -52,15 +62,20 @@ class MetricaPrincipalCard extends StatelessWidget {
                         children: [
                           Row(
                             children: [
-                              Icon(icon, color: colorPrimario, size: 18),
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: colorPrimario.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(icon, color: colorPrimario, size: 16),
+                              ),
                               const SizedBox(width: DashboardSpacing.sm),
                               Flexible(
                                 child: Text(
                                   titulo.toUpperCase(),
-                                  style: theme.textTheme.labelMedium
-                                      ?.copyWith(
-                                    color: theme
-                                        .colorScheme.onSurfaceVariant,
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
                                     letterSpacing: 1.2,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -73,15 +88,29 @@ class MetricaPrincipalCard extends StatelessWidget {
                           FittedBox(
                             fit: BoxFit.scaleDown,
                             alignment: Alignment.centerLeft,
-                            child: Text(
-                              valor,
-                              style: TextStyle(
-                                fontSize: 32,
-                                fontWeight: FontWeight.w800,
-                                color: theme.colorScheme.onSurface,
-                                height: 1.1,
-                              ),
-                            ),
+                            child: numericValue != null
+                                ? DashboardCounter(
+                                    target: numericValue!,
+                                    duration: const Duration(milliseconds: 1200),
+                                    curve: Curves.easeOutCubic,
+                                    prefix: valorPrefix,
+                                    suffix: valorSuffix,
+                                    style: TextStyle(
+                                      fontSize: 32,
+                                      fontWeight: FontWeight.w800,
+                                      color: theme.colorScheme.onSurface,
+                                      height: 1.1,
+                                    ),
+                                  )
+                                : Text(
+                                    valor,
+                                    style: TextStyle(
+                                      fontSize: 32,
+                                      fontWeight: FontWeight.w800,
+                                      color: theme.colorScheme.onSurface,
+                                      height: 1.1,
+                                    ),
+                                  ),
                           ),
                           const SizedBox(height: DashboardSpacing.xs),
                           Text(

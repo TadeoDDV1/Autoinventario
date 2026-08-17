@@ -39,7 +39,6 @@ class ProductoFormScreen extends ConsumerStatefulWidget {
 class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nombreController = TextEditingController();
-  final _skuController = TextEditingController();
   final _marcaController = TextEditingController();
   final _codigoBarrasController = TextEditingController();
   final _descripcionController = TextEditingController();
@@ -94,11 +93,22 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
   Future<void> _loadProducto() async {
     setState(() => _isLoading = true);
     try {
-      final api = ref.read(apiServiceProvider);
-      final producto = await api.getProductoById(widget.productoId!);
+      final producto = await ref.read(productoByIdProvider(widget.productoId!).future);
+      if (producto == null) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Producto no encontrado'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+          context.pop();
+        }
+        return;
+      }
       if (mounted) {
         _nombreController.text = producto.nombre;
-        _skuController.text = producto.sku ?? '';
         _marcaController.text = producto.marca ?? '';
         _codigoBarrasController.text = producto.codigoBarras ?? '';
         _descripcionController.text = producto.descripcion ?? '';
@@ -138,7 +148,6 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
   @override
   void dispose() {
     _nombreController.dispose();
-    _skuController.dispose();
     _marcaController.dispose();
     _codigoBarrasController.dispose();
     _descripcionController.dispose();
@@ -168,9 +177,6 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
 
     if (_codigoBarrasController.text.trim().isNotEmpty) {
       data['codigo_barras'] = _codigoBarrasController.text.trim();
-    }
-    if (_skuController.text.trim().isNotEmpty) {
-      data['sku'] = _skuController.text.trim();
     }
     if (_marcaController.text.trim().isNotEmpty) {
       data['marca'] = _marcaController.text.trim();
@@ -368,30 +374,12 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
             textCapitalization: TextCapitalization.words,
           ),
           const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: TextFormField(
-                  controller: _skuController,
-                  decoration: const InputDecoration(
-                    labelText: 'SKU interno',
-                    prefixIcon: Icon(Icons.qr_code_2),
-                    helperText: 'Opcional, único',
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: TextFormField(
-                  controller: _codigoBarrasController,
-                  decoration: const InputDecoration(
-                    labelText: 'Código de barras',
-                    prefixIcon: Icon(Icons.barcode_reader),
-                  ),
-                ),
-              ),
-            ],
+          TextFormField(
+            controller: _codigoBarrasController,
+            decoration: const InputDecoration(
+              labelText: 'Código de barras',
+              prefixIcon: Icon(Icons.barcode_reader),
+            ),
           ),
         ],
       ),
@@ -459,6 +447,7 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
               Expanded(
                 child: DropdownButtonFormField<UnidadMedida>(
                   initialValue: _unidadMedida,
+                  isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'Unidad de medida',
                     prefixIcon: Icon(Icons.straighten),
