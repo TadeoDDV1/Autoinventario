@@ -3,13 +3,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/constants/api_constants.dart';
 import '../../core/constants/durations.dart';
-import '../../core/errors/api_exception.dart';
 import '../../core/format/money.dart';
 import '../../core/utils/test_environment.dart';
+import '../../database/app_database.dart' as drift_db;
+import '../../database/database_provider.dart';
+import '../../domain/enums.dart';
 import '../../models/producto.dart';
-import '../../providers/producto_provider.dart';
 import 'barcode_scanner_button.dart';
 
 /// Input para buscar productos por código de barras o nombre.
@@ -116,14 +116,11 @@ class _BarcodeInputState extends ConsumerState<BarcodeInput> {
 
   Future<void> _buscarCoincidencias(String query) async {
     try {
-      final api = ref.read(apiServiceProvider);
-      final response = await api.getProductos(
-        search: query,
-        pageSize: ApiConstants.searchPageSize,
-      );
+      final db = ref.read(appDatabaseProvider);
+      final local = await db.buscarProductos(query);
       if (mounted) {
         setState(() {
-          _results = response.data;
+          _results = local.map(_dbProductoToModel).toList();
           _isLoading = false;
         });
       }
@@ -147,24 +144,21 @@ class _BarcodeInputState extends ConsumerState<BarcodeInput> {
     });
 
     try {
-      final api = ref.read(apiServiceProvider);
-      // Bloque B — Task B1: pasamos de /buscar (404 → null) a /escanear
-      // (200 con {existe, producto?, codigo}). El backend ya distingue
-      // "no registrado" de "error de red" — el widget honra esa distinción.
-      final result = await api.escanearProducto(codigo.trim());
+      final db = ref.read(appDatabaseProvider);
+      // Offline-first: buscar en la BD local (fuente de verdad). Sin
+      // round-trip al servidor — el catálogo local se mantiene al día con
+      // el botón Sincronizar.
+      final local = await db.getProductoByCodigo(codigo.trim());
 
-      if (result.existe && result.producto != null) {
-        _onProductoEncontradoConFeedback(result.producto!);
+      if (local != null) {
+        _onProductoEncontradoConFeedback(_dbProductoToModel(local));
       } else {
-        // No existe en backend: NO snack de error (sería molesto en Caja,
+        // No existe localmente: NO snack de error (sería molesto en Caja,
         // donde escanear códigos nuevos es el flujo esperado). Delegamos
         // al caller — CajaScreen abrirá el alta rápida.
         widget.onProductoNoRegistrado(codigo.trim());
         setState(() => _isLoading = false);
       }
-    } on ApiException catch (e) {
-      widget.onError('Error al buscar: ${e.message}');
-      setState(() => _isLoading = false);
     } catch (e) {
       widget.onError('Error al buscar: $e');
       setState(() => _isLoading = false);
@@ -417,6 +411,27 @@ class _BarcodeInputState extends ConsumerState<BarcodeInput> {
       ],
     );
   }
+}
+
+/// Convierte un Producto de la BD drift al modelo de dominio.
+Producto _dbProductoToModel(drift_db.Producto p) {
+  return Producto(
+    id: p.id,
+    codigoBarras: p.codigoBarras,
+    nombre: p.nombre,
+    marca: p.marca,
+    descripcion: p.descripcion,
+    uso: p.uso,
+    precioCompra: p.precioCompra,
+    precioVenta: p.precioVenta,
+    precioMayoreo: p.precioMayoreo,
+    unidadMedida: UnidadMedida.fromValue(p.unidadMedida),
+    stockActual: p.stockActual,
+    stockMinimo: p.stockMinimo,
+    categoriaId: p.categoriaId,
+    ubicacion: p.ubicacion,
+    activo: p.activo,
+  );
 }
 
 /// Mini tarjeta flotante que aparece tras un escaneo exitoso.

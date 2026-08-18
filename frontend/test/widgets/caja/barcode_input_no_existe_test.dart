@@ -1,79 +1,45 @@
 // Tests para el comportamiento de `BarcodeInput` cuando el código ingresado
-// NO está registrado en el backend.
+// NO está registrado en la BD local.
 //
-// Bloque B — Task B1: el input dejó de usar `/buscar` y pasó a usar
-// `/productos/escanear`. El endpoint nuevo no devuelve 404 cuando el código
-// no existe, sino `{existe: false, codigo: "..."}`. El widget debe distinguir
-// dos casos:
+// Offline-first estricto: el input ya no llama a `/productos/escanear` del
+// servidor. La búsqueda se hace contra la BD local (Drift). El widget debe
+// distinguir dos casos:
 //
-//   1) existe == true  + producto != null → onProductoEncontrado(producto)
+//   1) producto encontrado → onProductoEncontrado(producto)
 //      (comportamiento de siempre: agregar al carrito)
-//   2) existe == false                  → onProductoNoRegistrado(codigo)
+//   2) NO encontrado       → onProductoNoRegistrado(codigo)
 //      (nuevo callback para que CajaScreen abra el alta rápida)
 //
 // También cubrimos que NO se llame onError en el caso (2) — antes
 // aparecía un SnackBar rojo diciendo "Producto no encontrado", pero ese
 // camino será reemplazado por la apertura del alta inline (B2).
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:ferreteria_app/database/app_database.dart'
+    hide Producto, Categoria;
+import 'package:ferreteria_app/database/database_provider.dart';
 import 'package:ferreteria_app/models/producto.dart';
-import 'package:ferreteria_app/providers/producto_provider.dart';
-import 'package:ferreteria_app/services/api_service.dart';
 import 'package:ferreteria_app/widgets/caja/barcode_input.dart';
 
-/// Fake mínimo de ApiService que sólo implementa los métodos que el
-/// `BarcodeInput` toca cuando se hace submit (_onSubmit):
-///   - getProductos (para el debounce de búsqueda por nombre, sólo si se
-///                   dispara en el test — lo dejamos en noSuchMethod con
-///                   tolerancia)
-///   - escanearProducto (lo que vamos a stubbear explícitamente)
-///
-/// Cualquier otro método que el widget invoque accidentalmente hace throw
-/// ruidoso para detectarlo.
-class _FakeApiService implements ApiService {
-  EscanearResult escanearStub;
-  final List<String> escanearCalls = [];
-
-  _FakeApiService({required this.escanearStub});
-
-  @override
-  Future<EscanearResult> escanearProducto(String codigo) async {
-    escanearCalls.add(codigo);
-    return escanearStub;
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) {
-    throw UnimplementedError(
-      'ApiService fake: método no stubbeado -> ${invocation.memberName}',
-    );
-  }
-}
-
 void main() {
-  group('BarcodeInput — submit contra /escanear (Bloque B / Task B1)', () {
+  group('BarcodeInput — submit contra la BD local (offline-first)', () {
     testWidgets(
-      '(1) existe=false dispara onProductoNoRegistrado y NO onError',
+      '(1) código no existente dispara onProductoNoRegistrado y NO onError',
       (tester) async {
         Producto? productoEncontrado;
         String? codigoNoRegistrado;
         int errorsCount = 0;
 
-        final api = _FakeApiService(
-          escanearStub: EscanearResult(
-            existe: false,
-            codigo: '1234',
-            producto: null,
-          ),
-        );
+        final db = AppDatabase.test();
 
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              apiServiceProvider.overrideWithValue(api),
+              appDatabaseProvider.overrideWithValue(db),
             ],
             child: MaterialApp(
               home: Scaffold(
@@ -94,9 +60,6 @@ void main() {
         await tester.testTextInput.receiveAction(TextInputAction.search);
         await tester.pumpAndSettle();
 
-        // La API recibió el código (sin espacios extra).
-        expect(api.escanearCalls, ['1234']);
-
         // El callback de "no registrado" se llamó con el código escaneado.
         expect(codigoNoRegistrado, '1234');
 
@@ -109,34 +72,34 @@ void main() {
     );
 
     testWidgets(
-      '(2) existe=true + producto!=null dispara onProductoEncontrado y NO onProductoNoRegistrado',
+      '(2) producto existente en BD dispara onProductoEncontrado y NO onProductoNoRegistrado',
       (tester) async {
         Producto? productoEncontrado;
         String? codigoNoRegistrado;
         int errorsCount = 0;
-        final fakeProducto = Producto(
-          id: 42,
-          nombre: 'Tornillo 1/4"',
-          codigoBarras: '9999',
-          precioCompra: 5,
-          precioVenta: 10,
-          stockActual: 100,
-          stockMinimo: 10,
-          activo: true,
-        );
 
-        final api = _FakeApiService(
-          escanearStub: EscanearResult(
-            existe: true,
-            codigo: '9999',
-            producto: fakeProducto,
+        final db = AppDatabase.test();
+        final now = DateTime.now();
+        await db.insertProductos([
+          ProductosCompanion.insert(
+            id: const Value(42),
+            nombre: 'Tornillo 1/4"',
+            codigoBarras: const Value('9999'),
+            precioCompra: 5,
+            precioVenta: 10,
+            unidadMedida: 'pieza',
+            stockActual: 100,
+            stockMinimo: 10,
+            activo: true,
+            createdAt: now,
+            updatedAt: now,
           ),
-        );
+        ]);
 
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              apiServiceProvider.overrideWithValue(api),
+              appDatabaseProvider.overrideWithValue(db),
             ],
             child: MaterialApp(
               home: Scaffold(
@@ -155,7 +118,7 @@ void main() {
         await tester.testTextInput.receiveAction(TextInputAction.search);
         await tester.pumpAndSettle();
 
-        // El callback de encontrado se llamó con el producto del backend.
+        // onProductoEncontrado se llamó con el producto de la BD local.
         expect(productoEncontrado, isNotNull);
         expect(productoEncontrado!.id, 42);
         expect(productoEncontrado!.nombre, 'Tornillo 1/4"');
@@ -171,5 +134,4 @@ void main() {
       },
     );
   });
-
 }

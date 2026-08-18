@@ -36,25 +36,34 @@ class Categorias extends Table {
 }
 
 class VentasPendientes extends Table {
-  TextColumn get clientId => text().named('client_id').customConstraint('UNIQUE NOT NULL')();
+  TextColumn get clientId => text().named('client_id')();
   DateTimeColumn get createdAt => dateTime().named('created_at')();
   TextColumn get ventaData => text().named('venta_data')();
   RealColumn get total => real().named('total')();
   BoolColumn get synced => boolean().withDefault(const Constant(false)).named('synced')();
+
+  @override
+  Set<Column> get primaryKey => {clientId};
 }
 
 class EntradasPendientes extends Table {
-  TextColumn get clientId => text().named('client_id').customConstraint('UNIQUE NOT NULL')();
+  TextColumn get clientId => text().named('client_id')();
   DateTimeColumn get createdAt => dateTime().named('created_at')();
   TextColumn get entradaData => text().named('entrada_data')();
   BoolColumn get synced => boolean().withDefault(const Constant(false)).named('synced')();
+
+  @override
+  Set<Column> get primaryKey => {clientId};
 }
 
 class ProductosPendientes extends Table {
-  TextColumn get clientId => text().named('client_id').customConstraint('UNIQUE NOT NULL')();
+  TextColumn get clientId => text().named('client_id')();
   DateTimeColumn get createdAt => dateTime().named('created_at')();
   TextColumn get productoData => text().named('producto_data')();
   BoolColumn get synced => boolean().withDefault(const Constant(false)).named('synced')();
+
+  @override
+  Set<Column> get primaryKey => {clientId};
 }
 
 /// Ventas completadas (sincronizadas del servidor o creadas offline y ya subidas).

@@ -235,8 +235,10 @@ void main() {
           reason: 'El banner debe tener un FilledButton.tonal "Alta rápida"',
         );
 
-        // La API fue llamada con el código.
-        expect(api.escanearCalls, contains('7777'));
+        // Offline-first: el escaneo se resuelve contra la BD local (vacía
+        // en tests), NO contra la API — por eso no hay llamadas de red.
+        expect(api.escanearCalls, isEmpty,
+            reason: 'El escaneo no debe tocar la red (BD local primero)');
       },
     );
 

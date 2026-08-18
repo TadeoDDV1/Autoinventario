@@ -6,6 +6,7 @@ import '../../core/constants/durations.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/utils/codigo_manual.dart';
 import '../../core/utils/test_environment.dart';
+import '../../database/database_provider.dart';
 import '../../models/producto.dart';
 import '../../providers/producto_provider.dart';
 
@@ -156,6 +157,17 @@ class _AltaRapidaSheetState extends ConsumerState<AltaRapidaSheet> {
 
     for (var intento = 0; intento < _maxReintentosColision; intento++) {
       try {
+        // Offline-first: verificar duplicado contra la BD local antes de
+        // crear (los códigos 0-9999 pueden chocar con un producto ya
+        // guardado localmente). Si existe, regenerar y reintentar.
+        final db = ref.read(appDatabaseProvider);
+        final existente = await db.getProductoByCodigo(codigoActual);
+        if (existente != null) {
+          codigoActual = generarCodigoManualCaja();
+          _codigoController.text = codigoActual;
+          continue;
+        }
+
         final creado = await ref
             .read(productosProvider.notifier)
             .createProducto(

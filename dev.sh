@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 FLUTTER="$HOME/flutter/bin/flutter"
 
 detect_lan_ip() {
-  ip -4 addr show | grep -oP 'inet \K[0-9.]+' | grep '^192\.' | head -1
+  ip -4 addr show | grep -oP 'inet \K[0-9.]+' | grep -E '^(192\.168|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)' | head -1
 }
 
 detect_android_device() {
@@ -43,6 +43,10 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
+echo "Regenerando código drift (app_database.g.dart)..."
+cd "$ROOT/frontend"
+$FLUTTER pub run build_runner build --delete-conflicting-outputs
+
 ANDROID_DEVICE=$(detect_android_device)
 
 if [ -n "$ANDROID_DEVICE" ]; then
@@ -53,12 +57,10 @@ if [ -n "$ANDROID_DEVICE" ]; then
   fi
   echo "Dispositivo Android: $ANDROID_DEVICE"
   echo "IP backend: $LAN_IP"
-  cd "$ROOT/frontend"
   $FLUTTER run --device-id="$ANDROID_DEVICE" --dart-define=BACKEND_HOST="$LAN_IP" &
   FLUTTER_PID=$!
 else
   echo "Sin Android. Iniciando Linux..."
-  cd "$ROOT/frontend"
   if [ -f build/linux/x64/debug/bundle/ferreteria_app ]; then
     "$ROOT/frontend/build/linux/x64/debug/bundle/ferreteria_app" &
   else

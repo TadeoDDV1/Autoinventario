@@ -1,7 +1,17 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const String _defaultBackendHost = '10.0.2.2';
+/// Host inyectado en build con `--dart-define=BACKEND_HOST=...`.
+/// Permite que `dev.sh` apunte la app a la IP LAN real del backend
+/// (teléfono físico en la misma WiFi). Si no se define, usa el default.
+const String _defineBackendHost = String.fromEnvironment('BACKEND_HOST');
+
+/// No puede ser `const` porque `String.fromEnvironment` se evalúa como
+/// constante vacía en tiempo de análisis; la comparación sobre ella exige
+/// `final`.
+final String _defaultBackendHost = _defineBackendHost.isEmpty
+    ? '10.0.2.2'
+    : _defineBackendHost;
 const int _defaultBackendPort = 8080;
 
 const String _prefsKeyHost = 'backend_host';

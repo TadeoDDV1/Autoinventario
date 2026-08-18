@@ -27,11 +27,10 @@
 //   (13) AppBar título + ícono cerrar.
 //   (14) TextField interno es readOnly.
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:ferreteria_app/core/errors/api_exception.dart';
 import 'package:ferreteria_app/database/app_database.dart'
     hide Producto, Categoria;
 import 'package:ferreteria_app/database/database_provider.dart';
@@ -116,10 +115,10 @@ bool _codigoReadOnly(WidgetTester tester) {
   return inner.readOnly;
 }
 
-Widget _wrap({required _FakeApiService api, String? codigoInicial}) {
+Widget _wrap({required _FakeApiService api, String? codigoInicial, AppDatabase? db}) {
   return ProviderScope(
     overrides: [
-      appDatabaseProvider.overrideWithValue(AppDatabase.test()),
+      appDatabaseProvider.overrideWithValue(db ?? AppDatabase.test()),
       apiServiceProvider.overrideWithValue(api),
     ],
     child: MaterialApp(
@@ -275,12 +274,11 @@ void main() {
     });
 
     testWidgets(
-      '(5) submit OK → createProducto con defaults (stock=1/1, compra=0) y código 1-4 dígitos',
+      '(5) submit OK → crea producto en BD local con defaults (stock=1/1, compra=0) y código 1-4 dígitos',
       (tester) async {
-        final api = _FakeApiService(
-          createBehavior: [_stubProducto(id: 555)],
-        );
-        await tester.pumpWidget(_wrap(api: api));
+        final db = AppDatabase.test();
+        final api = _FakeApiService();
+        await tester.pumpWidget(_wrap(api: api, db: db));
         await tester.pumpAndSettle();
         await _openSheet(tester);
 
@@ -291,18 +289,19 @@ void main() {
         // esperar a que el frame se estabilice.
         await tester.pumpAndSettle();
 
-        expect(api.createCalls, hasLength(1));
-        final payload = api.createCalls.single;
-        expect(payload['nombre'], 'Tornillo B2');
-        expect(payload['precio_venta'], closeTo(15.5, 0.0001));
-        expect(payload['stock_actual'], 1);
-        expect(payload['stock_minimo'], 1);
-        expect(payload['precio_compra'], 0);
-        expect((payload['codigo_barras'] as String).length,
-            inInclusiveRange(1, 4));
-        expect(
-            RegExp(r'^[0-9]+$').hasMatch(payload['codigo_barras'] as String),
-            isTrue);
+        // La creación es 100% local (offline-first): el producto quedó en
+        // la BD con los defaults del modo rápido.
+        final creados = await db.getAllProductos();
+        expect(creados, hasLength(1));
+        final p = creados.single;
+        expect(p.nombre, 'Tornillo B2');
+        expect(p.precioVenta, closeTo(15.5, 0.0001));
+        expect(p.stockActual, 1);
+        expect(p.stockMinimo, 1);
+        expect(p.precioCompra, 0);
+        expect(p.codigoBarras, isNotNull);
+        expect(RegExp(r'^[0-9]+$').hasMatch(p.codigoBarras!), isTrue);
+        expect(p.codigoBarras!.length, inInclusiveRange(1, 4));
       },
     );
 
@@ -328,113 +327,133 @@ void main() {
   });
 
   group('AltaRapidaSheet — manejo de errores de createProducto', () {
-    testWidgets('(7) 409 → regenera código y reintenta automáticamente (2 calls)',
-        (tester) async {
-      // Primer create: 409 (colisión). Segundo: éxito.
-      final api = _FakeApiService(
-        createBehavior: [
-          ApiException(
-            code: 'DUPLICATE_CODE',
-            message: 'duplicate',
-            statusCode: 409,
-          ),
-          _stubProducto(id: 1001, codigo: 'segundo'),
-        ],
-      );
-
-      await tester.pumpWidget(_wrap(api: api));
-      await tester.pumpAndSettle();
-      await _openSheet(tester);
-
-      final codigo1 = _codigoTexto(tester);
-
-      await _fillNombrePrecio(tester, nombre: 'Producto 409', precio: '10');
-      await tester.tap(find.text('Crear y agregar al carrito'));
-      await tester.pumpAndSettle();
-
-      // Se llamó 2 veces: la primera con el código 1 (colisión) y la 2da
-      // con un código regenerado (≠ codigo1).
-      expect(api.createCalls, hasLength(2));
-      expect(api.createCalls[0]['codigo_barras'], codigo1);
-      expect(api.createCalls[1]['codigo_barras'], isNot(codigo1),
-          reason: 'Tras 409 debería regenerar el código');
-      expect(
-        (api.createCalls[1]['codigo_barras'] as String).length,
-        inInclusiveRange(1, 4),
-      );
-    });
-
     testWidgets(
-      '(8) tras 5 reintentos sigue 409 → snack "Tipealo manual" + código editable',
+      '(7) código que ya existe en BD local → regenera y crea con otro código',
       (tester) async {
-        final colisiones = List.generate(
-          5,
-          (_) => ApiException(
-            code: 'DUPLICATE_CODE',
-            message: 'duplicate',
-            statusCode: 409,
+        // Sembrar un producto cuyo código coincide con el código inicial
+        // del sheet.
+        final db = AppDatabase.test();
+        final now = DateTime.now();
+        await db.insertProductos([
+          ProductosCompanion.insert(
+            id: const Value(7777),
+            nombre: 'Existente',
+            codigoBarras: const Value('1234'),
+            precioCompra: 0,
+            precioVenta: 10,
+            unidadMedida: 'pieza',
+            stockActual: 5,
+            stockMinimo: 1,
+            activo: true,
+            createdAt: now,
+            updatedAt: now,
           ),
-        );
-        final api = _FakeApiService(createBehavior: colisiones);
+        ]);
 
-        await tester.pumpWidget(_wrap(api: api));
+        final api = _FakeApiService();
+        await tester.pumpWidget(_wrap(api: api, db: db, codigoInicial: '1234'));
         await tester.pumpAndSettle();
         await _openSheet(tester);
 
-        await _fillNombrePrecio(tester,
-            nombre: 'Producto colisión', precio: '10');
+        final codigo1 = _codigoTexto(tester);
+        expect(codigo1, '1234');
+
+        await _fillNombrePrecio(tester, nombre: 'Producto nuevo', precio: '10');
         await tester.tap(find.text('Crear y agregar al carrito'));
         await tester.pumpAndSettle();
 
-        // Se intentó exactamente 5 veces (no 6 — el 6to no se hace).
-        expect(api.createCalls, hasLength(5));
-
-        // El snack debe mencionar "Tipealo manual" (o equivalente).
-        expect(
-          find.textContaining('Tipealo manual'),
-          findsOneWidget,
-          reason: 'No se mostró el snack invitando a tipear manual',
-        );
-
-        // El campo código debe quedar editable.
-        expect(_codigoReadOnly(tester), isFalse,
-            reason: 'El campo código debe ser editable tras 5 colisiones');
+        // La creación es local: se insertó un segundo producto con un
+        // código distinto al que ya existía en la BD.
+        final creados = await db.getAllProductos();
+        expect(creados, hasLength(2));
+        final nuevo = creados.firstWhere((p) => p.nombre == 'Producto nuevo');
+        expect(nuevo.codigoBarras, isNot('1234'),
+            reason: 'Tras colisión local debería regenerar el código');
+        expect(nuevo.codigoBarras!.length, inInclusiveRange(1, 4));
       },
     );
 
-    testWidgets('(9) error genérico (no 409) → snack rojo, sheet NO se cierra',
-        (tester) async {
-      final api = _FakeApiService(
-        createBehavior: [
-          ApiException(
-            code: 'NETWORK_ERROR',
-            message: 'sin conexión',
-            statusCode: null,
+    testWidgets(
+      '(8) código disponible → alta rápida exitosa aunque la BD tenga otros productos',
+      (tester) async {
+        // Con productos variados en BD, el sheet debe lograr crear el nuevo
+        // (el código inicial es aleatorio y casi nunca colisiona).
+        final db = AppDatabase.test();
+        final now = DateTime.now();
+        await db.insertProductos([
+          for (var i = 1; i <= 3; i++)
+            ProductosCompanion.insert(
+              id: Value(i),
+              nombre: 'Producto $i',
+              codigoBarras: Value('$i'),
+              precioCompra: 0,
+              precioVenta: 10,
+              unidadMedida: 'pieza',
+              stockActual: 5,
+              stockMinimo: 1,
+              activo: true,
+              createdAt: now,
+              updatedAt: now,
+            ),
+        ]);
+
+        final api = _FakeApiService();
+        await tester.pumpWidget(_wrap(api: api, db: db));
+        await tester.pumpAndSettle();
+        await _openSheet(tester);
+
+        await _fillNombrePrecio(tester, nombre: 'Nuevo creado', precio: '25');
+        await tester.tap(find.text('Crear y agregar al carrito'));
+        await tester.pumpAndSettle();
+
+        final creados = await db.getAllProductos();
+        expect(creados, hasLength(4));
+        expect(creados.any((p) => p.nombre == 'Nuevo creado'), isTrue);
+      },
+    );
+
+    testWidgets(
+      '(9) submit OK devuelve el producto vía Navigator.pop para agregarlo al carrito',
+      (tester) async {
+        Producto? resultado;
+        final db = AppDatabase.test();
+        final api = _FakeApiService();
+        await tester.pumpWidget(ProviderScope(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            apiServiceProvider.overrideWithValue(api),
+          ],
+          child: MaterialApp(
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: Center(
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      resultado = await showModalBottomSheet<Producto?>(
+                        context: context,
+                        isScrollControlled: true,
+                        builder: (_) => const AltaRapidaSheet(),
+                      );
+                    },
+                    child: const Text('OPEN_SHEET'),
+                  ),
+                ),
+              ),
+            ),
           ),
-        ],
-      );
+        ));
+        await tester.pumpAndSettle();
+        await _openSheet(tester);
 
-      await tester.pumpWidget(_wrap(api: api));
-      await tester.pumpAndSettle();
-      await _openSheet(tester);
+        await _fillNombrePrecio(tester, nombre: 'Devuélveme', precio: '33');
+        await tester.tap(find.text('Crear y agregar al carrito'));
+        await tester.pumpAndSettle();
 
-      await _fillNombrePrecio(tester, nombre: 'Producto Net', precio: '10');
-      await tester.tap(find.text('Crear y agregar al carrito'));
-      await tester.pumpAndSettle();
-
-      // Sólo 1 intento (no retry).
-      expect(api.createCalls, hasLength(1));
-
-      // El sheet sigue abierto (banner presente).
-      expect(
-        find.textContaining('Código interno generado automáticamente'),
-        findsOneWidget,
-        reason: 'El sheet debería seguir abierto tras un error de red',
-      );
-
-      // El snack debe mencionar el mensaje de error.
-      expect(find.textContaining('sin conexión'), findsOneWidget);
-    });
+        expect(resultado, isNotNull);
+        expect(resultado!.nombre, 'Devuélveme');
+        expect(resultado!.precioVenta, closeTo(33, 0.0001));
+      },
+    );
   });
 
   group('AltaRapidaSheet — codigoInicial', () {

@@ -235,17 +235,17 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
       SnackBar(
         content: const Row(
           children: [
-            Icon(Icons.cloud_off, color: Colors.white, size: 20),
+            Icon(Icons.cloud_sync, color: Colors.white, size: 20),
             SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Sin conexión — venta guardada. Se sincroniza al reconectar.',
+                'Venta guardada localmente. Se sincroniza con el botón Sincronizar.',
                 style: TextStyle(color: Colors.white),
               ),
             ),
           ],
         ),
-        backgroundColor: Colors.orange.shade800,
+        backgroundColor: Colors.indigo.shade700,
         duration: const Duration(seconds: 4),
         behavior: SnackBarBehavior.floating,
       ),

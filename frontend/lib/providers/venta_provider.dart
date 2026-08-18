@@ -273,7 +273,7 @@ final carritoCantidadProvider = Provider<int>((ref) {
 });
 
 final ventasProvider = FutureProvider<List<Venta>>((ref) async {
-  // Leer TODO de la BD local (fuente de verdad offline-first)
+  // Leer de la BD local (fuente de verdad offline-first)
   try {
     final database = ref.read(appDatabaseProvider);
     final ventasLocal = await database.getAllVentas(limit: 500);

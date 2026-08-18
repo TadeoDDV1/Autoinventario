@@ -79,8 +79,8 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
       final categorias = await api.getCategorias();
       final db = ref.read(appDatabaseProvider);
 
-      await db.clearProductos();
-      await db.clearCategorias();
+      // Upsert preservando productos locales con ID negativo (creados
+      // offline y aún sin sincronizar) — no hacemos clearProductos().
       await db.insertProductos(productos.map((p) => ProductosCompanion(
             id: Value(p.id),
             codigoBarras: Value(p.codigoBarras),
@@ -314,7 +314,8 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
       final api = ref.read(apiServiceProvider);
       final resp = await api.getProductos(pageSize: 1000);
       final db = ref.read(appDatabaseProvider);
-      await db.clearProductos();
+      // Upsert preservando productos locales con ID negativo (creados
+      // offline y aún sin sincronizar) — no hacemos clearProductos().
       await db.insertProductos(resp.data.map((p) => ProductosCompanion(
             id: Value(p.id),
             codigoBarras: Value(p.codigoBarras),
@@ -463,7 +464,6 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
       intentarVenta(Map<String, dynamic> ventaData) async {
     final clientId = ventaData['_client_id'] as String?;
     final cache = ref.read(cacheServiceProvider);
-    final cola = await cache.getColaVentas();
 
     if (clientId == null) {
       return (
@@ -475,75 +475,34 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
       );
     }
 
+    final cola = await cache.getColaVentas();
     if (cola.any((v) => v.clientId == clientId)) {
       return (
         ok: true,
         id: null,
         folio: null,
-        mensaje: 'Venta ya en cola (sincronizará cuando vuelva la red)',
+        mensaje: 'Venta ya en cola (sincronizará con el botón)',
         encolado: true
       );
     }
 
-    try {
-      final dio = DioClient().dio;
-      final resp = await dio
-          .post('/ventas', data: ventaData)
-          .timeout(const Duration(seconds: 5));
-      if (resp.statusCode == 201) {
-        return (
-          ok: true,
-          id: resp.data['id'] as int?,
-          folio: resp.data['folio'] as String?,
-          mensaje: 'Venta registrada',
-          encolado: false
-        );
-      } else {
-        return (
-          ok: false,
-          id: null,
-          folio: null,
-          mensaje: 'Error del servidor (${resp.statusCode})',
-          encolado: false
-        );
-      }
-    } on DioException catch (e) {
-      if (e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.connectionError ||
-          e.type == DioExceptionType.receiveTimeout) {
-        final ventaPendiente = VentaPendiente(
-          clientId: clientId,
-          createdAt: DateTime.now(),
-          ventaData: ventaData,
-          total: (ventaData['total'] as num?)?.toDouble() ?? 0,
-        );
-        await encolarVenta(ventaPendiente);
-        state = ConectividadEstado.offline;
-        _wasOffline = true;
-        return (
-          ok: true,
-          id: null,
-          folio: null,
-          mensaje: 'Sin conexión — venta guardada localmente',
-          encolado: true
-        );
-      }
-      return (
-        ok: false,
-        id: null,
-        folio: null,
-        mensaje: 'Error: ${e.message}',
-        encolado: false
-      );
-    } catch (e) {
-      return (
-        ok: false,
-        id: null,
-        folio: null,
-        mensaje: 'Error inesperado: $e',
-        encolado: false
-      );
-    }
+    // Offline-first estricto: la venta SIEMPRE se guarda local primero y se
+    // encola para sincronizar. El servidor solo se toca con el botón
+    // Sincronizar (sincronizarCompleto → _sincronizarVentas).
+    final ventaPendiente = VentaPendiente(
+      clientId: clientId,
+      createdAt: DateTime.now(),
+      ventaData: ventaData,
+      total: (ventaData['total'] as num?)?.toDouble() ?? 0,
+    );
+    await encolarVenta(ventaPendiente);
+    return (
+      ok: true,
+      id: null,
+      folio: null,
+      mensaje: 'Venta guardada localmente — se sincroniza con el botón',
+      encolado: true
+    );
   }
 }
 

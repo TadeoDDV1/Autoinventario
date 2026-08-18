@@ -10,6 +10,7 @@ import '../../core/format/money.dart';
 import '../../core/theme/glass_tokens.dart';
 import '../../core/widgets/atmospheric_background.dart';
 import '../../core/widgets/glass_container.dart';
+import '../../database/database_provider.dart';
 import '../../providers/producto_provider.dart';
 import '../../services/chat_ejecutivo_service.dart' show ChatEjecutivoService, SugerenciaProducto;
 
@@ -166,21 +167,22 @@ class _EscanearProductoScreenState extends ConsumerState<EscanearProductoScreen>
       _codigoEscaneado = codigo.trim();
     });
     try {
-      final api = ref.read(apiServiceProvider);
-      // Usar el nuevo endpoint /escanear
-      final result = await api.escanearProducto(codigo.trim());
+      // Offline-first: buscar en la BD local (fuente de verdad). El
+      // catálogo local se mantiene al día con el botón Sincronizar.
+      final db = ref.read(appDatabaseProvider);
+      final local = await db.getProductoByCodigo(codigo.trim());
       if (!mounted) return;
 
-      if (result.existe && result.producto != null) {
+      if (local != null) {
         // Ya existe: ir a editar
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('"${result.producto!.nombre}" ya está registrado'),
+            content: Text('"${local.nombre}" ya está registrado'),
             backgroundColor: Colors.orange.shade700,
             behavior: SnackBarBehavior.floating,
           ),
         );
-        context.go('/inventario/editar/${result.producto!.id}');
+        context.go('/inventario/editar/${local.id}');
         return;
       }
       // No existe: pasar a autocompletado

@@ -138,60 +138,13 @@ class ProductosNotifier extends AsyncNotifier<PaginatedResponse<Producto>> {
     }
   }
 
-  /// Crea un producto: intenta el backend si hay red; si falla la conexión,
-  /// lo inserta localmente con un ID provisional y lo encola para sincronizar.
-  /// Devuelve el producto creado (con id provisional si fue offline).
+  /// Crea un producto SIEMPRE en la BD local (offline-first estricto).
+  /// Lo guarda con ID provisional negativo y lo encola en
+  /// [ProductosPendientes] para que el botón Sincronizar lo suba al
+  /// servidor. Devuelve el producto creado con su ID provisional.
   Future<Producto> createProducto(Map<String, dynamic> data) async {
-    final api = ref.read(apiServiceProvider);
-
-    // Intentar backend
-    try {
-      final id = await api.createProducto(data);
-      final creado = await api.getProductoById(id);
-
-      // Persistir localmente para futuras lecturas offline
-      try {
-        final db = ref.read(appDatabaseProvider);
-        await db.insertProductos([_productoToCompanion(creado)]);
-      } catch (e) {
-        if (kDebugMode) debugPrint('createProducto: persist local falló: $e');
-      }
-
-      ref.invalidateSelf();
-      return creado;
-    } on ApiException catch (e) {
-      // Si es error de conexión → offline-first
-      if (_esErrorRed(e)) {
-        return await _crearProductoOffline(data);
-      }
-      // Otro error (validación, 4xx distinto a red): relanzar
-      rethrow;
-    } catch (e) {
-      // Cualquier otro error de red/Dio → offline
-      if (_esDioErrorRed(e)) {
-        return await _crearProductoOffline(data);
-      }
-      rethrow;
-    }
-  }
-
-  bool _esErrorRed(ApiException e) {
-    // ApiException.fromDio mapea timeouts/connectionError a mensajes tipo
-    // 'connectionTimeout', 'connectionError', 'receiveTimeout'.
-    final msg = e.message.toLowerCase();
-    return msg.contains('timeout') ||
-        msg.contains('connection') ||
-        msg.contains('network') ||
-        msg.contains('socket');
-  }
-
-  bool _esDioErrorRed(Object e) {
-    final s = e.toString().toLowerCase();
-    return s.contains('timeout') ||
-        s.contains('connection') ||
-        s.contains('network') ||
-        s.contains('socket') ||
-        s.contains('dioexception');
+    final creado = await _crearProductoOffline(data);
+    return creado;
   }
 
   Future<Producto> _crearProductoOffline(Map<String, dynamic> data) async {
@@ -261,29 +214,6 @@ class ProductosNotifier extends AsyncNotifier<PaginatedResponse<Producto>> {
     } catch (_) {
       return '{}';
     }
-  }
-
-  drift_db.ProductosCompanion _productoToCompanion(Producto p) {
-    final now = DateTime.now();
-    return drift_db.ProductosCompanion.insert(
-      nombre: p.nombre,
-      precioCompra: p.precioCompra,
-      precioVenta: p.precioVenta,
-      unidadMedida: p.unidadMedida.value,
-      stockActual: p.stockActual,
-      stockMinimo: p.stockMinimo,
-      activo: p.activo,
-      createdAt: now,
-      updatedAt: now,
-      id: Value(p.id),
-      codigoBarras: Value(p.codigoBarras),
-      marca: Value(p.marca),
-      descripcion: Value(p.descripcion),
-      uso: Value(p.uso),
-      precioMayoreo: Value(p.precioMayoreo),
-      categoriaId: Value(p.categoriaId),
-      ubicacion: Value(p.ubicacion),
-    );
   }
 
   Future<void> updateProducto(int id, Map<String, dynamic> data) async {

@@ -89,6 +89,7 @@ Widget _wrap({
   required Widget child,
   required _FakeApiService api,
   List<Categoria>? categorias,
+  AppDatabase? db,
 }) {
   return ProviderScope(
     overrides: [
@@ -96,7 +97,7 @@ Widget _wrap({
       categoriasProvider.overrideWith(
         () => _FakeCategoriasNotifier(categorias ?? const <Categoria>[]),
       ),
-      appDatabaseProvider.overrideWithValue(AppDatabase.test()),
+      appDatabaseProvider.overrideWithValue(db ?? AppDatabase.test()),
     ],
     child: MaterialApp(home: child),
   );
@@ -206,12 +207,14 @@ void main() {
     );
 
     testWidgets(
-      '(4) submit OK → llama a createProducto con defaults (stock=1/1, compra=0)',
+      '(4) submit OK → crea producto en BD local con defaults (stock=1/1, compra=0)',
       (tester) async {
+        final db = AppDatabase.test();
         final api = _FakeApiService();
         await tester.pumpWidget(
           _wrap(
             api: api,
+            db: db,
             child: const ProductoFormScreen(
               mode: ProductoFormMode.rapido,
             ),
@@ -231,21 +234,28 @@ void main() {
         await tester.tap(find.text('Crear y agregar al carrito'));
         await tester.pumpAndSettle();
 
-        expect(api.createCalls, hasLength(1));
-        final payload = api.createCalls.single;
+        // Offline-first: el producto se guarda en la BD local (no se llama
+        // a la API).
+        final creados = await db.getAllProductos();
+        expect(creados, hasLength(1));
+        final p = creados.single;
 
         // Campos explícitos del usuario
-        expect(payload['nombre'], 'Tornillo autogen');
-        expect(payload['precio_venta'], closeTo(15.5, 0.0001));
+        expect(p.nombre, 'Tornillo autogen');
+        expect(p.precioVenta, closeTo(15.5, 0.0001));
 
         // Defaults del modo rápido
-        expect(payload['stock_actual'], 1);
-        expect(payload['stock_minimo'], 1);
-        expect(payload['precio_compra'], 0);
+        expect(p.stockActual, 1);
+        expect(p.stockMinimo, 1);
+        expect(p.precioCompra, 0);
 
         // El código de barras debe estar presente (generado)
-        expect(payload.containsKey('codigo_barras'), isTrue);
-        expect((payload['codigo_barras'] as String).isNotEmpty, isTrue);
+        expect(p.codigoBarras, isNotNull);
+        expect(p.codigoBarras!.isNotEmpty, isTrue);
+
+        // El producto quedó encolado para sincronizar
+        final pendientes = await db.getProductosPendientes();
+        expect(pendientes, hasLength(1));
       },
     );
 
