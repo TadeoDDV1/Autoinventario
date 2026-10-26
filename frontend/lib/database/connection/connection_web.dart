@@ -1,0 +1,16 @@
+import 'package:drift/drift.dart';
+import 'package:drift/wasm.dart';
+
+QueryExecutor openConnection() {
+  return DatabaseConnection.delayed(Future(() async {
+    final result = await WasmDatabase.open(
+      databaseName: 'autoinventario',
+      sqlite3Uri: Uri.parse('sqlite3.wasm'),
+      driftWorkerUri: Uri.parse('drift_worker.js'),
+    );
+    return result.resolvedExecutor;
+  }));
+}
+
+QueryExecutor createTestConnection() =>
+    throw UnsupportedError('AppDatabase.test() no está disponible en web');

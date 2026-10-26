@@ -46,4 +46,22 @@ void main() {
     // Add a product by simulating a scan
     // (skipping — just verify no overflow at empty state)
   });
+
+  testWidgets('no overflow con ventana angosta y baja (móvil corto)', (tester) async {
+    tester.view.physicalSize = const Size(660, 300);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final api = FakeApi();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        appDatabaseProvider.overrideWithValue(AppDatabase.test()),
+        apiServiceProvider.overrideWithValue(api),
+        copilotSugerenciasProvider.overrideWith((ref) async => const SugerenciasResponse(sugerencias: [], fuente: 't')),
+      ],
+      child: const MaterialApp(home: CajaScreen()),
+    ));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
 }

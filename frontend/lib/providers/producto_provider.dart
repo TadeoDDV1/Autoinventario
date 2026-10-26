@@ -35,11 +35,7 @@ Producto _dbProductoToModel(drift_db.Producto p) {
 
 /// Convierte una Categoría de la BD drift a un modelo de dominio.
 Categoria _dbCategoriaToModel(drift_db.Categoria c) {
-  return Categoria(
-    id: c.id,
-    nombre: c.nombre,
-    descripcion: c.descripcion,
-  );
+  return Categoria(id: c.id, nombre: c.nombre, descripcion: c.descripcion);
 }
 
 final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
@@ -176,11 +172,13 @@ class ProductosNotifier extends AsyncNotifier<PaginatedResponse<Producto>> {
     final idProvisional = await db.insertProductoLocal(companion);
 
     // Encolar para sincronización posterior
-    await db.addProductoPendiente(drift_db.ProductosPendientesCompanion.insert(
-      clientId: clientId,
-      createdAt: now,
-      productoData: _jsonEncode(data),
-    ));
+    await db.addProductoPendiente(
+      drift_db.ProductosPendientesCompanion.insert(
+        clientId: clientId,
+        createdAt: now,
+        productoData: _jsonEncode(data),
+      ),
+    );
 
     if (kDebugMode) {
       debugPrint('createProducto offline: id=$idProvisional client=$clientId');
@@ -198,8 +196,7 @@ class ProductosNotifier extends AsyncNotifier<PaginatedResponse<Producto>> {
       precioCompra: (data['precio_compra'] as num?)?.toDouble() ?? 0,
       precioVenta: (data['precio_venta'] as num?)?.toDouble() ?? 0,
       precioMayoreo: (data['precio_mayoreo'] as num?)?.toDouble(),
-      unidadMedida:
-          UnidadMedida.fromValue(data['unidad_medida'] as String?),
+      unidadMedida: UnidadMedida.fromValue(data['unidad_medida'] as String?),
       stockActual: (data['stock_actual'] as int?) ?? 0,
       stockMinimo: (data['stock_minimo'] as int?) ?? 0,
       categoriaId: data['categoria_id'] as int?,
@@ -217,8 +214,47 @@ class ProductosNotifier extends AsyncNotifier<PaginatedResponse<Producto>> {
   }
 
   Future<void> updateProducto(int id, Map<String, dynamic> data) async {
-    final api = ref.read(apiServiceProvider);
-    await api.updateProducto(id, data);
+    final db = ref.read(appDatabaseProvider);
+
+    // 1. Actualizar BD local primero (offline-first)
+    final now = DateTime.now();
+    await db.actualizarProductoLocal(
+      id,
+      drift_db.ProductosCompanion(
+        nombre: Value(data['nombre'] as String? ?? ''),
+        marca: Value(data['marca'] as String?),
+        codigoBarras: Value(data['codigo_barras'] as String?),
+        descripcion: Value(data['descripcion'] as String?),
+        uso: Value(data['uso'] as String?),
+        precioCompra: Value((data['precio_compra'] as num?)?.toDouble() ?? 0),
+        precioVenta: Value((data['precio_venta'] as num?)?.toDouble() ?? 0),
+        precioMayoreo: Value((data['precio_mayoreo'] as num?)?.toDouble()),
+        unidadMedida: Value(
+          (data['unidad_medida'] as String?) ?? UnidadMedida.pieza.value,
+        ),
+        stockActual: Value((data['stock_actual'] as int?) ?? 0),
+        stockMinimo: Value((data['stock_minimo'] as int?) ?? 0),
+        categoriaId: Value(data['categoria_id'] as int?),
+        ubicacion: Value(data['ubicacion'] as String?),
+        updatedAt: Value(now),
+      ),
+    );
+
+    // 2. Si el producto ya tiene ID real del servidor, encolar el update
+    // para sincronización. Productos provisionales (id < 0) ya tienen su
+    // POST pendiente y no deben duplicarse.
+    if (id > 0) {
+      final payload = {...data, '_accion': 'update', '_id_remoto': id};
+      await db.addProductoPendiente(
+        drift_db.ProductosPendientesCompanion.insert(
+          clientId:
+              'prod-upd-$now.millisecondsSinceEpoch-${now.hashCode.toRadixString(16)}',
+          createdAt: now,
+          productoData: _jsonEncode(payload),
+        ),
+      );
+    }
+
     ref.invalidateSelf();
   }
 
@@ -284,8 +320,10 @@ Map<String, dynamic> buildRapidoCreatePayload({
 
 /// Producto individual por ID desde la BD local (offline-first).
 /// Si no existe localmente, intenta la API como fallback.
-final productoByIdProvider =
-    FutureProvider.family<Producto?, int>((ref, id) async {
+final productoByIdProvider = FutureProvider.family<Producto?, int>((
+  ref,
+  id,
+) async {
   final database = ref.read(appDatabaseProvider);
   try {
     final local = await database.getProductoById(id);

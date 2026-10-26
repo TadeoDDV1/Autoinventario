@@ -8,10 +8,12 @@ import '../../core/constants/durations.dart';
 import '../../core/format/money.dart';
 import '../../database/app_database.dart';
 import '../../models/venta.dart';
+import '../../providers/configuracion_provider.dart';
 import '../../providers/producto_provider.dart';
 import '../../providers/ia_provider.dart';
 import '../../providers/venta_provider.dart';
 import '../../services/sync_service.dart';
+import '../../services/ticket_pdf_service.dart';
 import '../../database/database_provider.dart';
 
 /// Panel del carrito, simplificado. Aparece fijo en mobile y en el side
@@ -83,10 +85,21 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
     final detallesJson = carrito.map((item) {
       return {
         'producto_id': item.producto.id,
+        'nombre_producto': item.producto.nombre,
         'cantidad': item.cantidad,
         'precio_unitario': item.producto.precioVenta,
         'subtotal': item.subtotal,
       };
+    }).toList();
+
+    final detallesVenta = carrito.map((item) {
+      return DetalleVenta(
+        productoId: item.producto.id,
+        nombreProducto: item.producto.nombre,
+        cantidad: item.cantidad,
+        precioUnitario: item.producto.precioVenta,
+        subtotal: item.subtotal,
+      );
     }).toList();
 
     setState(() => _procesando = true);
@@ -124,6 +137,26 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
           clientId: ventaData['_client_id'] as String,
         );
 
+        final ahora = DateTime.now();
+        final folioFinal = result.folio ??
+            (result.encolado
+                ? 'OFFLINE-${ahora.millisecondsSinceEpoch}'
+                : 'VENT-${result.id ?? ahora.millisecondsSinceEpoch}');
+
+        final ventaObjeto = Venta(
+          id: result.id,
+          folio: folioFinal,
+          subtotal: subtotal,
+          iva: iva,
+          total: total,
+          metodoPago: _metodoPago.value,
+          montoRecibido:
+              _metodoPago == MetodoPago.efectivo ? _montoRecibido : null,
+          cambio: cambio,
+          fecha: ahora,
+          detalles: detallesVenta,
+        );
+
         ref.read(carritoProvider.notifier).vaciar();
         ref.invalidate(productosProvider);
         ref.invalidate(dashboardProvider);
@@ -134,10 +167,37 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
         if (result.encolado) {
           // Decrementar stock localmente para cada producto de la venta
           await _decrementarStockLocal(detallesJson);
-          _mostrarSnackOffline();
+        }
+
+        final config = ref.read(configuracionProvider).value ??
+            const ConfiguracionApp();
+
+        if (config.tieneImpresora) {
+          if (config.imprimirAutomatico) {
+            TicketPdfService.imprimir(ventaObjeto, config: config).catchError((e) {
+              if (kDebugMode) debugPrint('Error al auto-imprimir ticket: $e');
+              return false;
+            });
+            _mostrarSnackExito(
+              folio: folioFinal,
+              cambio: cambio,
+              venta: ventaObjeto,
+              imprimiendo: true,
+            );
+          } else {
+            _mostrarModalPostCobro(ventaObjeto, config);
+          }
         } else {
-          _mostrarSnackExito(
-              folio: result.folio ?? '—', cambio: cambio, ventaId: result.id);
+          if (result.encolado) {
+            _mostrarSnackOffline(venta: ventaObjeto);
+          } else {
+            _mostrarSnackExito(
+              folio: folioFinal,
+              cambio: cambio,
+              venta: ventaObjeto,
+              imprimiendo: false,
+            );
+          }
         }
       } else {
         _mostrarSnackError(result.mensaje ?? 'Error al registrar venta');
@@ -151,53 +211,59 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
     }
   }
 
+  void _mostrarModalPostCobro(Venta venta, ConfiguracionApp config) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _CobroExitosoSheet(venta: venta, config: config),
+    );
+  }
+
   void _mostrarSnackExito({
     required String folio,
     double? cambio,
-    int? ventaId,
+    required Venta venta,
+    bool imprimiendo = false,
   }) {
     HapticFeedback.heavyImpact();
     final cambioTxt = (cambio != null && cambio > 0)
         ? ' · Cambio ${money.format(cambio)}'
         : '';
+    final msg = imprimiendo
+        ? 'Venta registrada e imprimiendo · Folio $folio$cambioTxt'
+        : 'Venta registrada · Folio $folio$cambioTxt';
+
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.check_circle, color: Colors.white, size: 20),
+            Icon(
+              imprimiendo ? Icons.print : Icons.check_circle,
+              color: Colors.white,
+              size: 20,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Venta registrada · Folio $folio$cambioTxt',
+                msg,
                 style: const TextStyle(color: Colors.white),
               ),
             ),
           ],
         ),
         backgroundColor: Colors.green.shade700,
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 4),
         behavior: SnackBarBehavior.floating,
-        action: (ventaId != null)
-            ? SnackBarAction(
-                label: 'Ver ticket',
-                textColor: Colors.white,
-                onPressed: () {
-                  final carrito = <DetalleVenta>[];
-                  // El ticket se muestra con los datos básicos
-                  context.push('/caja/ticket', extra: Venta(
-                    id: ventaId,
-                    folio: folio,
-                    detalles: carrito,
-                    subtotal: 0,
-                    iva: 0,
-                    total: 0,
-                    metodoPago: 'efectivo',
-                  ));
-                },
-              )
-            : null,
+        action: SnackBarAction(
+          label: 'Ver ticket',
+          textColor: Colors.white,
+          onPressed: () {
+            context.push('/caja/ticket', extra: venta);
+          },
+        ),
       ),
     );
   }
@@ -227,7 +293,7 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
     );
   }
 
-  void _mostrarSnackOffline() {
+  void _mostrarSnackOffline({Venta? venta}) {
     HapticFeedback.mediumImpact();
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
@@ -248,6 +314,15 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
         backgroundColor: Colors.indigo.shade700,
         duration: const Duration(seconds: 4),
         behavior: SnackBarBehavior.floating,
+        action: venta != null
+            ? SnackBarAction(
+                label: 'Ver ticket',
+                textColor: Colors.white,
+                onPressed: () {
+                  context.push('/caja/ticket', extra: venta);
+                },
+              )
+            : null,
       ),
     );
   }
@@ -313,7 +388,7 @@ class QuickCartSummaryState extends ConsumerState<QuickCartSummary> {
         detallesCompanion.add(VentasDetalleLocalCompanion(
           ventaId: Value(ventaId),
           productoId: Value(d['producto_id'] as int),
-          nombreProducto: Value(''),
+          nombreProducto: Value((d['nombre_producto'] as String?) ?? ''),
           precioUnitario: Value((d['precio_unitario'] as num).toDouble()),
           cantidad: Value(d['cantidad'] as int),
           subtotal: Value((d['subtotal'] as num).toDouble()),
@@ -892,6 +967,139 @@ class _CobroRapidoSheetState extends State<_CobroRapidoSheet> {
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('Cancelar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom-sheet modal mostrado tras confirmar el cobro cuando la impresora
+/// está habilitada pero en modo manual (confirmar).
+class _CobroExitosoSheet extends StatelessWidget {
+  final Venta venta;
+  final ConfiguracionApp config;
+
+  const _CobroExitosoSheet({
+    required this.venta,
+    required this.config,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cambio = venta.cambio ?? 0.0;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const Center(
+              child: Icon(Icons.check_circle, color: Colors.green, size: 54),
+            ),
+            const SizedBox(height: 12),
+            Center(
+              child: Text(
+                '¡Venta completada!',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Center(
+              child: Text(
+                'Folio: ${venta.folio ?? "S/N"} · Total: ${money.format(venta.total)}',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            if (venta.montoRecibido != null && cambio > 0) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.green.shade200),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Cambio a entregar:',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: Colors.green.shade900,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      money.format(cambio),
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        color: Colors.green.shade900,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.of(context).pop();
+                TicketPdfService.imprimir(venta, config: config);
+              },
+              icon: const Icon(Icons.print),
+              label: const Text('Imprimir Ticket'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(double.infinity, 50),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      context.push('/caja/ticket', extra: venta);
+                    },
+                    icon: const Icon(Icons.visibility),
+                    label: const Text('Ver / Compartir'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Listo / Siguiente'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

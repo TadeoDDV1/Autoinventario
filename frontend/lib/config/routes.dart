@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/animations/app_animations.dart';
 import '../core/layout/breakpoints.dart';
+import '../core/navigation/route_not_found_screen.dart';
 import '../core/widgets/atmospheric_background.dart';
 import '../domain/enums.dart';
 import '../models/venta.dart';
@@ -101,11 +102,22 @@ Page<dynamic> _scaleFadePage(Widget child, LocalKey? key) {
   );
 }
 
+/// Convención de navegación (ver `core/navigation/nav_helpers.dart`):
+/// * `/caja`, `/dashboard`, `/inventario`, `/inventario/predicciones` →
+///   viven en el shell y se cambian con `context.go()`.
+/// * Todo lo demás (`/caja/ticket`, `/caja/historial`, `/inventario/nuevo`,
+///   `/inventario/editar/:id`, `/configuracion`, `/chat`...) es un overlay
+///   a nivel raíz: se abre con `context.push()` y se cierra con `popOrGo()`.
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/caja',
+    // Sin esto, un `go()` a una ruta inexistente lanzaba "No routes for
+    // location" y la app se quedaba en pantalla en blanco.
+    errorBuilder: (context, state) =>
+        RouteNotFoundScreen(location: state.uri.toString()),
     routes: [
+      // ── Páginas del shell (llevan la navegación lateral/inferior visible) ──
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
         builder: (context, state, child) {
@@ -123,115 +135,108 @@ final routerProvider = Provider<GoRouter>((ref) {
             pageBuilder: (context, state) => const NoTransitionPage(
               child: CajaScreen(),
             ),
-            routes: [
-              GoRoute(
-                path: 'ticket',
-                parentNavigatorKey: _rootNavigatorKey,
-                pageBuilder: (context, state) {
-                  final venta = state.extra as Venta;
-                  return _fadeSlidePage(
-                    TicketScreen(venta: venta),
-                    state.pageKey,
-                  );
-                },
-              ),
-              GoRoute(
-                path: 'historial',
-                parentNavigatorKey: _rootNavigatorKey,
-                pageBuilder: (context, state) {
-                  return _fadeSlidePage(
-                    const HistorialVentasScreen(),
-                    state.pageKey,
-                  );
-                },
-              ),
-            ],
           ),
           GoRoute(
             path: '/inventario',
             pageBuilder: (context, state) => const NoTransitionPage(
               child: InventarioScreen(),
             ),
-            routes: [
-              GoRoute(
-                path: 'predicciones',
-                pageBuilder: (context, state) {
-                  return _fadeSlidePage(
-                    const PrediccionesScreen(),
-                    state.pageKey,
-                  );
-                },
-              ),
-              GoRoute(
-                path: 'nuevo',
-                parentNavigatorKey: _rootNavigatorKey,
-                pageBuilder: (context, state) {
-                  return _slideUpPage(
-                    const ProductoFormScreen(),
-                    state.pageKey,
-                  );
-                },
-              ),
-              GoRoute(
-                path: 'nuevo-rapido',
-                parentNavigatorKey: _rootNavigatorKey,
-                pageBuilder: (context, state) {
-                  return _slideUpPage(
-                    const ProductoFormScreen(
-                      mode: ProductoFormMode.rapido,
-                    ),
-                    state.pageKey,
-                  );
-                },
-              ),
-              GoRoute(
-                path: 'escanear',
-                parentNavigatorKey: _rootNavigatorKey,
-                pageBuilder: (context, state) {
-                  return _scaleFadePage(
-                    const EscanearProductoScreen(),
-                    state.pageKey,
-                  );
-                },
-              ),
-              GoRoute(
-                path: 'editar/:id',
-                parentNavigatorKey: _rootNavigatorKey,
-                pageBuilder: (context, state) {
-                  final id = int.parse(state.pathParameters['id']!);
-                  return _slideUpPage(
-                    ProductoFormScreen(productoId: id),
-                    state.pageKey,
-                  );
-                },
-              ),
-              GoRoute(
-                path: 'entrada',
-                parentNavigatorKey: _rootNavigatorKey,
-                pageBuilder: (context, state) {
-                  return _slideUpPage(
-                    const EntradaScreen(),
-                    state.pageKey,
-                  );
-                },
-              ),
-              GoRoute(
-                path: 'entradas',
-                parentNavigatorKey: _rootNavigatorKey,
-                pageBuilder: (context, state) {
-                  return _fadeSlidePage(
-                    const HistorialEntradasScreen(),
-                    state.pageKey,
-                  );
-                },
-              ),
-            ],
+          ),
+          GoRoute(
+            path: '/inventario/predicciones',
+            pageBuilder: (context, state) {
+              return _fadeSlidePage(
+                const PrediccionesScreen(),
+                state.pageKey,
+              );
+            },
           ),
         ],
       ),
+
+      // ── Overlays: pantalla completa, SIN shell debajo ──
+      //
+      // Estas rutas deben vivir en la raíz y nunca como hijas del ShellRoute.
+      // Si son hijas del shell, `go()` las monta dos veces (como `child` del
+      // shell y como página del navigator raíz) y Flutter revienta con
+      // "Multiple widgets used the same GlobalKey", dejando la pantalla en
+      // negro al volver. Ver test/test_navigation_back_test.dart.
+      GoRoute(
+        path: '/caja/ticket',
+        pageBuilder: (context, state) {
+          final venta = state.extra as Venta;
+          return _fadeSlidePage(
+            TicketScreen(venta: venta),
+            state.pageKey,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/caja/historial',
+        pageBuilder: (context, state) {
+          return _fadeSlidePage(
+            const HistorialVentasScreen(),
+            state.pageKey,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/inventario/nuevo',
+        pageBuilder: (context, state) {
+          return _slideUpPage(
+            const ProductoFormScreen(),
+            state.pageKey,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/inventario/nuevo-rapido',
+        pageBuilder: (context, state) {
+          return _slideUpPage(
+            const ProductoFormScreen(mode: ProductoFormMode.rapido),
+            state.pageKey,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/inventario/escanear',
+        pageBuilder: (context, state) {
+          return _scaleFadePage(
+            const EscanearProductoScreen(),
+            state.pageKey,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/inventario/editar/:id',
+        pageBuilder: (context, state) {
+          final id = int.parse(state.pathParameters['id']!);
+          return _slideUpPage(
+            ProductoFormScreen(productoId: id),
+            state.pageKey,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/inventario/entrada',
+        pageBuilder: (context, state) {
+          return _slideUpPage(
+            const EntradaScreen(),
+            state.pageKey,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/inventario/entradas',
+        pageBuilder: (context, state) {
+          return _fadeSlidePage(
+            const HistorialEntradasScreen(),
+            state.pageKey,
+          );
+        },
+      ),
       GoRoute(
         path: '/configuracion',
-        parentNavigatorKey: _rootNavigatorKey,
         pageBuilder: (context, state) {
           return _slideUpPage(
             const ConfiguracionScreen(),
@@ -241,7 +246,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/chat',
-        parentNavigatorKey: _rootNavigatorKey,
         pageBuilder: (context, state) {
           return _fadeSlidePage(
             const ChatScreen(),
@@ -251,7 +255,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(
             path: 'historial',
-            parentNavigatorKey: _rootNavigatorKey,
             pageBuilder: (context, state) {
               return _fadeSlidePage(
                 const HistorialChatScreen(),

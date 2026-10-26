@@ -11,8 +11,11 @@ import '../models/entrada.dart';
 
 class EntradaService {
   final Dio _dio;
+  final AppDatabase _db;
 
-  EntradaService({Dio? dio}) : _dio = dio ?? DioClient().dio;
+  EntradaService({Dio? dio, AppDatabase? db})
+    : _dio = dio ?? DioClient().dio,
+      _db = db ?? AppDatabase();
 
   Future<Map<String, dynamic>> create(Map<String, dynamic> data) async {
     try {
@@ -30,17 +33,26 @@ class EntradaService {
     }
   }
 
-  Future<Map<String, dynamic>> _guardarOffline(Map<String, dynamic> data) async {
-    final clientId = 'entrada-${DateTime.now().millisecondsSinceEpoch}-${DateTime.now().hashCode.toRadixString(16)}';
-    final db = AppDatabase();
-    await db.addEntradaPendiente(EntradasPendientesCompanion(
-      clientId: Value(clientId),
-      createdAt: Value(DateTime.now()),
-      entradaData: Value(jsonEncode(data)),
-      synced: const Value(false),
-    ));
+  Future<Map<String, dynamic>> _guardarOffline(
+    Map<String, dynamic> data,
+  ) async {
+    final clientId =
+        'entrada-${DateTime.now().millisecondsSinceEpoch}-${DateTime.now().hashCode.toRadixString(16)}';
+    await _db.addEntradaPendiente(
+      EntradasPendientesCompanion(
+        clientId: Value(clientId),
+        createdAt: Value(DateTime.now()),
+        entradaData: Value(jsonEncode(data)),
+        synced: const Value(false),
+      ),
+    );
     if (kDebugMode) debugPrint('Entrada guardada offline: $clientId');
-    return {'id': null, 'offline': true, 'client_id': clientId, 'mensaje': 'Guardada offline — sincronizará al reconectar'};
+    return {
+      'id': null,
+      'offline': true,
+      'client_id': clientId,
+      'mensaje': 'Guardada offline — sincronizará al reconectar',
+    };
   }
 
   /// Devuelve entradas paginadas con sus detalles cargados.
@@ -53,10 +65,7 @@ class EntradaService {
     int pageSize = 20,
   }) async {
     try {
-      final params = <String, dynamic>{
-        'page': page,
-        'page_size': pageSize,
-      };
+      final params = <String, dynamic>{'page': page, 'page_size': pageSize};
       if (proveedor != null && proveedor.isNotEmpty) {
         params['proveedor'] = proveedor;
       }
@@ -65,13 +74,17 @@ class EntradaService {
       if (hasta != null) params['hasta'] = hasta;
 
       final response = await _dio.get('/entradas', queryParameters: params);
-      return PaginatedEntradas.fromJson(
-        response.data as Map<String, dynamic>,
-      );
+      return PaginatedEntradas.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
       if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.connectionError) {
-        return const PaginatedEntradas(items: [], total: 0, page: 1, pageSize: 20, totalPages: 0);
+        return const PaginatedEntradas(
+          items: [],
+          total: 0,
+          page: 1,
+          pageSize: 20,
+          totalPages: 0,
+        );
       }
       throw ApiException.fromDio(e);
     }
@@ -84,13 +97,17 @@ class EntradaService {
         '/entradas/historial',
         queryParameters: filtro.toQueryParams(),
       );
-      return PaginatedEntradas.fromJson(
-        response.data as Map<String, dynamic>,
-      );
+      return PaginatedEntradas.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
       if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.connectionError) {
-        return const PaginatedEntradas(items: [], total: 0, page: 1, pageSize: 20, totalPages: 0);
+        return const PaginatedEntradas(
+          items: [],
+          total: 0,
+          page: 1,
+          pageSize: 20,
+          totalPages: 0,
+        );
       }
       throw ApiException.fromDio(e);
     }
@@ -100,9 +117,7 @@ class EntradaService {
   Future<EntradaInventario> getById(int id) async {
     try {
       final response = await _dio.get('/entradas/$id');
-      return EntradaInventario.fromJson(
-        response.data as Map<String, dynamic>,
-      );
+      return EntradaInventario.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }

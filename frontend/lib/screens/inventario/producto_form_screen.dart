@@ -5,9 +5,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/constants/durations.dart';
 import '../../core/errors/api_exception.dart';
+import '../../core/navigation/nav_helpers.dart';
 import '../../core/widgets/atmospheric_background.dart';
+import '../../core/utils/codigo_manual.dart';
 import '../../domain/enums.dart';
+import '../../models/producto.dart';
 import '../../providers/producto_provider.dart';
+import '../../providers/venta_provider.dart';
 import '../../widgets/inventario/margen_banner.dart';
 import '../../widgets/inventario/producto_form_section.dart';
 
@@ -54,14 +58,18 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
   bool _isLoading = false;
   bool get _isEditing => widget.productoId != null;
 
-  bool get _esRapido =>
-      widget.mode == ProductoFormMode.rapido && !_isEditing;
+  /// Marca si hay cambios sin guardar (para advertir al salir).
+  bool _dirty = false;
 
-  /// Generador placeholder de código interno para modo rápido.
-  String _generarCodigoRapido() {
-    final n = DateTime.now().millisecondsSinceEpoch % 10000;
-    return n.toString().padLeft(4, '0');
+  void _markDirty() {
+    if (!_dirty) setState(() => _dirty = true);
   }
+
+  bool get _esRapido => widget.mode == ProductoFormMode.rapido && !_isEditing;
+
+  /// Genera un código interno para modo rápido usando la misma utilidad
+  /// que el alta rápida de caja (rango 0–9999).
+  String _generarCodigoRapido() => generarCodigoManualCaja();
 
   void _regenerarCodigoRapido() {
     setState(() {
@@ -84,6 +92,23 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
     // Listeners para refrescar el banner de margen en vivo
     _precioCompraController.addListener(_onPreciosChanged);
     _precioVentaController.addListener(_onPreciosChanged);
+
+    // Listeners para detectar cambios sin guardar
+    for (final c in [
+      _nombreController,
+      _marcaController,
+      _codigoBarrasController,
+      _descripcionController,
+      _usoController,
+      _precioCompraController,
+      _precioVentaController,
+      _precioMayoreoController,
+      _stockActualController,
+      _stockMinimoController,
+      _ubicacionController,
+    ]) {
+      c.addListener(_markDirty);
+    }
   }
 
   void _onPreciosChanged() {
@@ -93,7 +118,9 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
   Future<void> _loadProducto() async {
     setState(() => _isLoading = true);
     try {
-      final producto = await ref.read(productoByIdProvider(widget.productoId!).future);
+      final producto = await ref.read(
+        productoByIdProvider(widget.productoId!).future,
+      );
       if (producto == null) {
         if (mounted) {
           setState(() => _isLoading = false);
@@ -107,6 +134,7 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
         }
         return;
       }
+
       if (mounted) {
         _nombreController.text = producto.nombre;
         _marcaController.text = producto.marca ?? '';
@@ -122,6 +150,7 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
         _ubicacionController.text = producto.ubicacion ?? '';
         _selectedCategoriaId = producto.categoriaId;
         _unidadMedida = producto.unidadMedida;
+        _dirty = false;
         setState(() => _isLoading = false);
       }
     } on ApiException catch (e) {
@@ -199,14 +228,30 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
     }
 
     try {
+      Producto? creado;
       if (_isEditing) {
         await ref
             .read(productosProvider.notifier)
             .updateProducto(widget.productoId!, data);
       } else {
-        await ref.read(productosProvider.notifier).createProducto(data);
+        creado = await ref
+            .read(productosProvider.notifier)
+            .createProducto(data);
       }
       if (mounted) {
+        // En modo rápido el botón promete "agregar al carrito": lo hacemos.
+        if (_esRapido && creado != null) {
+          ref.read(carritoProvider.notifier).agregarProducto(creado);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${creado.nombre} agregado al carrito'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          // Ruta overlay abierta con push: popOrGo vuelve a Caja.
+          popOrGo(context, '/caja');
+          return;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -215,7 +260,7 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        context.go('/inventario');
+        popOrGo(context, '/inventario');
       }
     } on ApiException catch (e) {
       if (mounted) {
@@ -242,34 +287,69 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
     }
   }
 
+  Future<void> _confirmarSalirSiHayCambios() async {
+    if (!_dirty || _isLoading) {
+      popOrGo(context, '/inventario');
+      return;
+    }
+    final salir = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Descartar cambios?'),
+        content: const Text(
+          'Tienes cambios sin guardar. Si sales ahora se perderán.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Continuar editando'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Descartar y salir'),
+          ),
+        ],
+      ),
+    );
+    if (salir == true && mounted) popOrGo(context, '/inventario');
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final categoriasAsync = ref.watch(categoriasProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_isEditing ? 'Editar Producto' : 'Nuevo Producto'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/inventario'),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _confirmarSalirSiHayCambios();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(_isEditing ? 'Editar Producto' : 'Nuevo Producto'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: _confirmarSalirSiHayCambios,
+          ),
+          actions: [
+            if (widget.mode == ProductoFormMode.full && !_isEditing)
+              IconButton(
+                icon: const Icon(Icons.flash_on),
+                tooltip: 'Cambiar a modo rápido',
+                // Reemplazamos para no apilar form sobre form.
+                onPressed: () =>
+                    replaceWith(context, '/inventario/nuevo-rapido'),
+              ),
+          ],
         ),
-        actions: [
-          if (widget.mode == ProductoFormMode.full && !_isEditing)
-            IconButton(
-              icon: const Icon(Icons.flash_on),
-              tooltip: 'Cambiar a modo rápido',
-              onPressed: () => context.go('/inventario/nuevo-rapido'),
-            ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          const AtmosphericBackground(),
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _buildBody(theme, categoriasAsync),
-        ],
+        body: Stack(
+          children: [
+            const AtmosphericBackground(),
+            _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _buildBody(theme, categoriasAsync),
+          ],
+        ),
       ),
     );
   }
@@ -282,6 +362,7 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
           constraints: const BoxConstraints(maxWidth: 720),
           child: Form(
             key: _formKey,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: _esRapido
@@ -311,9 +392,8 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
               labelText: 'Nombre del producto *',
               prefixIcon: Icon(Icons.label_outline),
             ),
-            validator: (v) => v == null || v.trim().isEmpty
-                ? 'Requerido'
-                : null,
+            validator: (v) =>
+                v == null || v.trim().isEmpty ? 'Requerido' : null,
           ),
           const SizedBox(height: 16),
           TextFormField(
@@ -339,12 +419,8 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
     ];
   }
 
-  List<Widget> _buildFullSections(
-    ThemeData theme,
-    AsyncValue categoriasAsync,
-  ) {
-    final precioCompra =
-        double.tryParse(_precioCompraController.text) ?? 0;
+  List<Widget> _buildFullSections(ThemeData theme, AsyncValue categoriasAsync) {
+    final precioCompra = double.tryParse(_precioCompraController.text) ?? 0;
     final precioVenta = double.tryParse(_precioVentaController.text) ?? 0;
 
     return [
@@ -499,8 +575,9 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
                     labelText: 'Precio compra *',
                     prefixIcon: Icon(Icons.shopping_bag_outlined),
                   ),
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Requerido';
                     final val = double.tryParse(v);
@@ -518,8 +595,9 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
                     labelText: 'Precio venta *',
                     prefixIcon: Icon(Icons.sell_outlined),
                   ),
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Requerido';
                     final val = double.tryParse(v);
@@ -550,10 +628,7 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
           ),
           if (precioCompra > 0 && precioVenta > 0) ...[
             const SizedBox(height: 14),
-            MargenBanner(
-              precioCompra: precioCompra,
-              precioVenta: precioVenta,
-            ),
+            MargenBanner(precioCompra: precioCompra, precioVenta: precioVenta),
           ],
         ],
       ),
@@ -628,10 +703,7 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
               width: 20,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          : Text(
-              _submitButtonLabel(),
-              style: const TextStyle(fontSize: 16),
-            ),
+          : Text(_submitButtonLabel(), style: const TextStyle(fontSize: 16)),
     ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.2, end: 0);
   }
 
@@ -661,10 +733,7 @@ class _ProductoFormScreenState extends ConsumerState<ProductoFormScreen> {
           icon: const Icon(Icons.refresh),
           onPressed: _regenerarCodigoRapido,
           style: IconButton.styleFrom(
-            padding: const EdgeInsets.symmetric(
-              vertical: 12,
-              horizontal: 12,
-            ),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
           ),
         ),
       ],

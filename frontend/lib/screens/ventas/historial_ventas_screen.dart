@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/format/money.dart';
+import '../../core/navigation/nav_helpers.dart';
 import '../../core/theme/glass_tokens.dart';
 import '../../core/widgets/atmospheric_background.dart';
 import '../../core/widgets/glass_container.dart';
@@ -23,7 +24,8 @@ class HistorialVentasScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Historial de Ventas'),
         leading: IconButton(
-          onPressed: () => context.go('/caja'),
+          // Ruta overlay abierta con push: se cierra con popOrGo (ver nav_helpers).
+          onPressed: () => popOrGo(context, '/caja'),
           icon: const Icon(Icons.arrow_back),
         ),
         actions: [
@@ -218,7 +220,7 @@ class HistorialVentasScreen extends ConsumerWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => DraggableScrollableSheet(
+      builder: (sheetContext) => DraggableScrollableSheet(
         initialChildSize: 0.6,
         minChildSize: 0.4,
         maxChildSize: 0.9,
@@ -419,11 +421,27 @@ class HistorialVentasScreen extends ConsumerWidget {
 
               const SizedBox(height: 24),
 
+              // Botón ver / imprimir ticket
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    // Cerramos el sheet con su propio context y navegamos
+                    // con el del screen (sigue montado tras el pop).
+                    Navigator.pop(sheetContext);
+                    context.push('/caja/ticket', extra: venta);
+                  },
+                  icon: const Icon(Icons.receipt_long),
+                  label: const Text('Ver / Imprimir Ticket'),
+                ),
+              ),
+              const SizedBox(height: 10),
+
               // Botón cerrar
               SizedBox(
                 width: double.infinity,
-                child: TextButton(
-                  onPressed: () => Navigator.pop(context),
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(sheetContext),
                   child: const Text('Cerrar'),
                 ),
               ),

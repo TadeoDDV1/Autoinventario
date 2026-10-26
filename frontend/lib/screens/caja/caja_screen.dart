@@ -144,7 +144,8 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
   }
 
   void _nuevoProducto() {
-    context.go('/inventario/nuevo');
+    // Ruta overlay: push, no go (ver nav_helpers.dart).
+    context.push('/inventario/nuevo');
   }
 
   void _abrirCobroRapido() {
@@ -242,6 +243,7 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
     AsyncValue productosAsync,
   ) {
     final posicion = ref.watch(burbujaPosicionProvider);
+    final esActivo = ref.watch(burbujaActivaProvider);
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
       body: Stack(
@@ -290,12 +292,12 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
               ),
             ],
           ),
-          Positioned(
-            bottom: MediaQuery.of(context).padding.bottom + 16,
-            right: posicion == BurbujaPosicion.bottomRight ? 16 : null,
-            left: posicion == BurbujaPosicion.bottomLeft ? 16 : null,
-            child: const IaChatBubble(),
-          ),
+          if (esActivo)
+            Positioned(
+              top: posicion.y,
+              left: posicion.x,
+              child: IaChatBubble(),
+            ),
         ],
       ),
     );
@@ -340,11 +342,15 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
               const SizedBox(width: 12),
               const SyncChip(),
               const Spacer(),
-              TextButton.icon(
-                onPressed: () => context.go('/caja/historial'),
-                icon: const Icon(Icons.receipt_long, size: 20),
-                label: const Text('Historial'),
-              ),
+Container(
+                 padding: const EdgeInsets.symmetric(vertical: 4),
+                 child: TextButton.icon(
+                   // Ruta overlay: push, no go (ver nav_helpers.dart).
+                   onPressed: () => context.push('/caja/historial'),
+                   icon: const Icon(Icons.receipt_long, size: 20),
+                   label: const Text('Historial'),
+                 ),
+               ),
             ],
           ),
         ),
@@ -353,26 +359,33 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
   }
 
   Widget _buildMobileLayout(ThemeData theme, AsyncValue productosAsync) {
-    return Column(
-      children: [
-        StickySearchBar(
-          onProductoEncontrado: _onProductoScan,
-          onError: _onScanError,
-          onProductoNoRegistrado: _onProductoNoRegistrado,
-          externalFocusNode: _inputFocus,
+    // CustomScrollView: si la ventana es baja, searchbar + grid + carrito
+    // hacen scroll en conjunto (evita RenderFlex overflow).
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(
+          child: StickySearchBar(
+            onProductoEncontrado: _onProductoScan,
+            onError: _onScanError,
+            onProductoNoRegistrado: _onProductoNoRegistrado,
+            externalFocusNode: _inputFocus,
+          ),
         ),
         if (_ultimoCodigoNoRegistrado != null)
-          _NoRegistradoBanner(
-            codigo: _ultimoCodigoNoRegistrado!,
-            onTapAlta: () => _abrirAltaRapida(codigo: _ultimoCodigoNoRegistrado),
-            onDismiss: _limpiarUltimoCodigoNoRegistrado,
+          SliverToBoxAdapter(
+            child: _NoRegistradoBanner(
+              codigo: _ultimoCodigoNoRegistrado!,
+              onTapAlta: () =>
+                  _abrirAltaRapida(codigo: _ultimoCodigoNoRegistrado),
+              onDismiss: _limpiarUltimoCodigoNoRegistrado,
+            ),
           ),
-        Expanded(
-          child: _buildProductGrid(productosAsync),
-        ),
-        QuickCartSummary(
-          key: _cartKey,
-          onLimpiar: () => ref.read(carritoProvider.notifier).vaciar(),
+        ..._buildProductGridSlivers(productosAsync),
+        SliverToBoxAdapter(
+          child: QuickCartSummary(
+            key: _cartKey,
+            onLimpiar: () => ref.read(carritoProvider.notifier).vaciar(),
+          ),
         ),
       ],
     );
@@ -505,17 +518,17 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
     );
   }
 
-  Widget _buildProductGrid(AsyncValue productosAsync) {
+  List<Widget> _buildProductGridSlivers(AsyncValue productosAsync) {
     final theme = Theme.of(context);
-    return productosAsync.when(
-      data: (paginated) {
-        final productos = paginated.data;
-        if (productos.isEmpty) {
-          return Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+    return [
+      productosAsync.when(
+        data: (paginated) {
+          final productos = paginated.data;
+          if (productos.isEmpty) {
+            return SliverFillRemaining(
+              hasScrollBody: false,
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
                     Icons.qr_code_scanner,
@@ -540,35 +553,40 @@ class _CajaScreenState extends ConsumerState<CajaScreen> {
                   ),
                 ],
               ),
+            );
+          }
+          return SliverPadding(
+            padding: const EdgeInsets.all(12),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 200,
+                childAspectRatio: 1.3,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) => ProductTile(producto: productos[index]),
+                childCount: productos.length,
+              ),
             ),
           );
-        }
-        return GridView.builder(
-          padding: const EdgeInsets.all(12),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 200,
-            childAspectRatio: 1.3,
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
-          ),
-          itemCount: productos.length,
-          itemBuilder: (context, index) {
-            return ProductTile(producto: productos[index]);
-          },
-        );
-      },
-      loading: () =>
-          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-      error: (e, _) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            'Error al cargar productos: $e',
-            textAlign: TextAlign.center,
+        },
+        loading: () => const SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        ),
+        error: (e, _) => SliverFillRemaining(
+          hasScrollBody: false,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              'Error al cargar productos: $e',
+              textAlign: TextAlign.center,
+            ),
           ),
         ),
       ),
-    );
+    ];
   }
 }
 

@@ -18,7 +18,7 @@ func ConnectDB() (*sqlx.DB, error) {
 	password := getEnv("DB_PASSWORD", "")
 	dbName := getEnv("DB_NAME", "ferreteria_db")
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4", user, password, host, port, dbName)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4&multiStatements=true", user, password, host, port, dbName)
 
 	db, err := sqlx.Connect("mysql", dsn)
 	if err != nil {
@@ -27,6 +27,10 @@ func ConnectDB() (*sqlx.DB, error) {
 
 	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(5)
+
+	if err := RunMigrations(db, "migrations"); err != nil {
+		return nil, fmt.Errorf("error ejecutando migraciones: %w", err)
+	}
 
 	return db, nil
 }

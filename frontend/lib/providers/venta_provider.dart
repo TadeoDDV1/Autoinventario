@@ -245,6 +245,23 @@ class CarritoNotifier extends Notifier<List<CarritoItem>> {
     state = nuevaLista;
     _saveToStorage();
   }
+
+  int get cantidadTotal => state.length;
+
+  void setCantidadDirecta(Producto producto, int cantidad) {
+    final idx = state.indexWhere((i) => i.producto.id == producto.id);
+    if (idx >= 0) {
+      state = [
+        for (var i = 0; i < state.length; i++)
+          if (i == idx) state[i].copyWith(cantidad: cantidad) else state[i],
+      ];
+    } else {
+      agregarProducto(producto);
+      if (cantidad > 1) {
+        actualizarCantidad(producto.id, cantidad);
+      }
+    }
+  }
 }
 
 final carritoProvider =
@@ -318,24 +335,3 @@ final ventasProvider = FutureProvider<List<Venta>>((ref) async {
     return const [];
   }
 });
-
-/// Extensión para setear cantidad sin pasar por el server.
-/// Usado durante reconciliación inicial.
-extension CarritoDirectSetter on CarritoNotifier {
-  int get cantidadTotal => state.length;
-
-  void setCantidadDirecta(Producto producto, int cantidad) {
-    final idx = state.indexWhere((i) => i.producto.id == producto.id);
-    if (idx >= 0) {
-      state = [
-        for (var i = 0; i < state.length; i++)
-          if (i == idx) state[i].copyWith(cantidad: cantidad) else state[i],
-      ];
-    } else {
-      agregarProducto(producto);
-      if (cantidad > 1) {
-        actualizarCantidad(producto.id, cantidad);
-      }
-    }
-  }
-}

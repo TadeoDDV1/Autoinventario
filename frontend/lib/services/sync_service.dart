@@ -5,9 +5,11 @@ import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../config/api_config.dart';
 import '../core/api/dio_client.dart';
+import '../core/constants/api_constants.dart';
 import '../core/utils/test_environment.dart';
 import '../database/app_database.dart';
 import '../database/database_provider.dart';
@@ -28,7 +30,10 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
     // En tests el Timer.periodic agenda frames sin fin y nunca deja
     // "settle" a pumpAndSettle. En producción se comporta igual que antes.
     if (!isRunningTests) {
-      _pingTimer = Timer.periodic(const Duration(seconds: 30), (_) => _checkConnectivity());
+      _pingTimer = Timer.periodic(
+        const Duration(seconds: 30),
+        (_) => _checkConnectivity(),
+      );
     }
     Future.microtask(_checkConnectivity);
     ref.onDispose(() => _pingTimer?.cancel());
@@ -37,11 +42,13 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
 
   Future<void> _checkConnectivity() async {
     try {
-      final dio = Dio(BaseOptions(
-        baseUrl: apiBaseUrlSync,
-        connectTimeout: const Duration(seconds: 3),
-        receiveTimeout: const Duration(seconds: 3),
-      ));
+      final dio = Dio(
+        BaseOptions(
+          baseUrl: apiBaseUrlSync,
+          connectTimeout: const Duration(seconds: 3),
+          receiveTimeout: const Duration(seconds: 3),
+        ),
+      );
       final resp = await dio.get('/health').timeout(const Duration(seconds: 4));
       if (resp.statusCode == 200) {
         _consecutiveFailures = 0;
@@ -81,33 +88,45 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
 
       // Upsert preservando productos locales con ID negativo (creados
       // offline y aún sin sincronizar) — no hacemos clearProductos().
-      await db.insertProductos(productos.map((p) => ProductosCompanion(
-            id: Value(p.id),
-            codigoBarras: Value(p.codigoBarras),
-            nombre: Value(p.nombre),
-            marca: Value(p.marca),
-            descripcion: Value(p.descripcion),
-            uso: Value(p.uso),
-            precioCompra: Value(p.precioCompra),
-            precioVenta: Value(p.precioVenta),
-            precioMayoreo: Value(p.precioMayoreo),
-            unidadMedida: Value(p.unidadMedida.value),
-            stockActual: Value(p.stockActual),
-            stockMinimo: Value(p.stockMinimo),
-            categoriaId: Value(p.categoriaId),
-            ubicacion: Value(p.ubicacion),
-            activo: Value(p.activo),
-            createdAt: Value(DateTime.now()),
-            updatedAt: Value(DateTime.now()),
-          )).toList());
-      await db.insertCategorias(categorias.map((c) => CategoriasCompanion(
-            id: Value(c.id),
-            nombre: Value(c.nombre),
-            descripcion: Value(c.descripcion),
-            activo: const Value(true),
-            createdAt: Value(DateTime.now()),
-            updatedAt: Value(DateTime.now()),
-          )).toList());
+      await db.insertProductos(
+        productos
+            .map(
+              (p) => ProductosCompanion(
+                id: Value(p.id),
+                codigoBarras: Value(p.codigoBarras),
+                nombre: Value(p.nombre),
+                marca: Value(p.marca),
+                descripcion: Value(p.descripcion),
+                uso: Value(p.uso),
+                precioCompra: Value(p.precioCompra),
+                precioVenta: Value(p.precioVenta),
+                precioMayoreo: Value(p.precioMayoreo),
+                unidadMedida: Value(p.unidadMedida.value),
+                stockActual: Value(p.stockActual),
+                stockMinimo: Value(p.stockMinimo),
+                categoriaId: Value(p.categoriaId),
+                ubicacion: Value(p.ubicacion),
+                activo: Value(p.activo),
+                createdAt: Value(DateTime.now()),
+                updatedAt: Value(DateTime.now()),
+              ),
+            )
+            .toList(),
+      );
+      await db.insertCategorias(
+        categorias
+            .map(
+              (c) => CategoriasCompanion(
+                id: Value(c.id),
+                nombre: Value(c.nombre),
+                descripcion: Value(c.descripcion),
+                activo: const Value(true),
+                createdAt: Value(DateTime.now()),
+                updatedAt: Value(DateTime.now()),
+              ),
+            )
+            .toList(),
+      );
     } catch (_) {}
   }
 
@@ -122,6 +141,7 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
   /// 2. Pull: descarga productos, categorías, ventas y entradas del servidor.
   Future<Map<String, int>> sincronizarCompleto() async {
     state = ConectividadEstado.sincronizando;
+    ref.read(syncErroresProvider.notifier).state = const [];
     final result = <String, int>{
       'ventas_subidas': 0,
       'entradas_subidas': 0,
@@ -161,16 +181,32 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
       int synced = 0;
       for (final pendiente in cola) {
         try {
-          final data = jsonDecode(pendiente.productoData) as Map<String, dynamic>;
-          final resp = await dio.post('/productos', data: data);
-          if (resp.statusCode == 200 || resp.statusCode == 201) {
-            final nuevoId = resp.data['id'] as int?;
-            if (nuevoId != null) {
-              final allLocal = await db.getAllProductos();
-              for (final local in allLocal) {
-                if (local.id < 0 && local.nombre == data['nombre']) {
-                  await db.reemplazarProductoProvisional(local.id, nuevoId);
-                  break;
+          final origen =
+              jsonDecode(pendiente.productoData) as Map<String, dynamic>;
+
+          // Update offline: se sube con PUT al endpoint del producto.
+          final esUpdate = origen['_accion'] == 'update';
+          final idRemoto = origen['_id_remoto'] as int?;
+          final data = Map<String, dynamic>.from(origen)
+            ..remove('_accion')
+            ..remove('_id_remoto');
+
+          final resp = esUpdate && idRemoto != null
+              ? await dio.put('/productos/$idRemoto', data: data)
+              : await dio.post('/productos', data: data);
+
+          if (resp.statusCode == 200 ||
+              resp.statusCode == 201 ||
+              resp.statusCode == 204) {
+            if (!esUpdate) {
+              final nuevoId = resp.data is Map ? resp.data['id'] as int? : null;
+              if (nuevoId != null) {
+                final allLocal = await db.getAllProductos();
+                for (final local in allLocal) {
+                  if (local.id < 0 && local.nombre == data['nombre']) {
+                    await db.reemplazarProductoProvisional(local.id, nuevoId);
+                    break;
+                  }
                 }
               }
             }
@@ -198,11 +234,13 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
       final dio = DioClient().dio;
       final body = {
         'ventas': cola
-            .map((v) => {
-                  'client_id': v.clientId,
-                  'created_at': v.createdAt.toIso8601String(),
-                  'venta': v.ventaData,
-                })
+            .map(
+              (v) => {
+                'client_id': v.clientId,
+                'created_at': v.createdAt.toIso8601String(),
+                'venta': v.ventaData,
+              },
+            )
             .toList(),
       };
       final resp = await dio.post('/sync/ventas', data: body);
@@ -210,6 +248,7 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
         final data = resp.data as Map<String, dynamic>;
         final resultados = (data['resultados'] as List<dynamic>?) ?? const [];
         final idsExito = <String>[];
+        final errores = <String>[];
         final db = ref.read(appDatabaseProvider);
 
         for (final r in resultados) {
@@ -219,7 +258,9 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
             idsExito.add(clientId);
 
             // Mover la venta de VentasPendientes a VentasLocal con el ID real
-            final ventaPendiente = cola.firstWhere((v) => v.clientId == clientId);
+            final ventaPendiente = cola.firstWhere(
+              (v) => v.clientId == clientId,
+            );
             final serverId = m['id'] as int?;
             final serverFolio = m['folio'] as String?;
 
@@ -230,14 +271,20 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
               final detallesCompanion = <VentasDetalleLocalCompanion>[];
               for (final d in detallesJson) {
                 final dd = d as Map<String, dynamic>;
-                detallesCompanion.add(VentasDetalleLocalCompanion(
-                  ventaId: Value(serverId),
-                  productoId: Value((dd['producto_id'] as num?)?.toInt() ?? 0),
-                  nombreProducto: Value(''),
-                  precioUnitario: Value((dd['precio_unitario'] as num?)?.toDouble() ?? 0),
-                  cantidad: Value((dd['cantidad'] as num?)?.toInt() ?? 0),
-                  subtotal: Value((dd['subtotal'] as num?)?.toDouble() ?? 0),
-                ));
+                detallesCompanion.add(
+                  VentasDetalleLocalCompanion(
+                    ventaId: Value(serverId),
+                    productoId: Value(
+                      (dd['producto_id'] as num?)?.toInt() ?? 0,
+                    ),
+                    nombreProducto: Value(''),
+                    precioUnitario: Value(
+                      (dd['precio_unitario'] as num?)?.toDouble() ?? 0,
+                    ),
+                    cantidad: Value((dd['cantidad'] as num?)?.toInt() ?? 0),
+                    subtotal: Value((dd['subtotal'] as num?)?.toDouble() ?? 0),
+                  ),
+                );
               }
 
               await db.upsertVentaConDetalle(
@@ -246,11 +293,17 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
                   folio: Value(serverFolio ?? 'VENT-$serverId'),
                   clientId: Value(clientId),
                   fecha: Value(ventaPendiente.createdAt),
-                  subtotal: Value((ventaData['subtotal'] as num?)?.toDouble() ?? 0),
+                  subtotal: Value(
+                    (ventaData['subtotal'] as num?)?.toDouble() ?? 0,
+                  ),
                   iva: Value((ventaData['iva'] as num?)?.toDouble() ?? 0),
                   total: Value(ventaPendiente.total),
-                  metodoPago: Value((ventaData['metodo_pago'] as String?) ?? 'efectivo'),
-                  montoRecibido: Value((ventaData['monto_recibido'] as num?)?.toDouble()),
+                  metodoPago: Value(
+                    (ventaData['metodo_pago'] as String?) ?? 'efectivo',
+                  ),
+                  montoRecibido: Value(
+                    (ventaData['monto_recibido'] as num?)?.toDouble(),
+                  ),
                   cambio: Value((ventaData['cambio'] as num?)?.toDouble()),
                   synced: const Value(true),
                 ),
@@ -267,12 +320,22 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
                 }
               }
             }
+          } else {
+            final clientId = m['client_id'] as String? ?? 'desconocido';
+            final error = m['error'] as String? ?? 'Error desconocido';
+            errores.add('$clientId: $error');
+            if (kDebugMode)
+              debugPrint('Sync venta fallida [$clientId]: $error');
           }
         }
 
+        if (errores.isNotEmpty) {
+          ref.read(syncErroresProvider.notifier).state = errores;
+        }
         await cache.marcarSincronizadas(idsExito);
         ref.invalidate(colaVentasCountProvider);
-        if (kDebugMode) debugPrint('Sync ventas: ${idsExito.length}/${cola.length}');
+        if (kDebugMode)
+          debugPrint('Sync ventas: ${idsExito.length}/${cola.length}');
         return idsExito.length;
       }
     } catch (e) {
@@ -316,35 +379,49 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
       final db = ref.read(appDatabaseProvider);
       // Upsert preservando productos locales con ID negativo (creados
       // offline y aún sin sincronizar) — no hacemos clearProductos().
-      await db.insertProductos(resp.data.map((p) => ProductosCompanion(
-            id: Value(p.id),
-            codigoBarras: Value(p.codigoBarras),
-            nombre: Value(p.nombre),
-            marca: Value(p.marca),
-            descripcion: Value(p.descripcion),
-            uso: Value(p.uso),
-            precioCompra: Value(p.precioCompra),
-            precioVenta: Value(p.precioVenta),
-            precioMayoreo: Value(p.precioMayoreo),
-            unidadMedida: Value(p.unidadMedida.value),
-            stockActual: Value(p.stockActual),
-            stockMinimo: Value(p.stockMinimo),
-            categoriaId: Value(p.categoriaId),
-            ubicacion: Value(p.ubicacion),
-            activo: Value(p.activo),
-            createdAt: Value(DateTime.now()),
-            updatedAt: Value(DateTime.now()),
-          )).toList());
+      await db.insertProductos(
+        resp.data
+            .map(
+              (p) => ProductosCompanion(
+                id: Value(p.id),
+                codigoBarras: Value(p.codigoBarras),
+                nombre: Value(p.nombre),
+                marca: Value(p.marca),
+                descripcion: Value(p.descripcion),
+                uso: Value(p.uso),
+                precioCompra: Value(p.precioCompra),
+                precioVenta: Value(p.precioVenta),
+                precioMayoreo: Value(p.precioMayoreo),
+                unidadMedida: Value(p.unidadMedida.value),
+                stockActual: Value(p.stockActual),
+                stockMinimo: Value(p.stockMinimo),
+                categoriaId: Value(p.categoriaId),
+                ubicacion: Value(p.ubicacion),
+                activo: Value(p.activo),
+                createdAt: Value(DateTime.now()),
+                updatedAt: Value(DateTime.now()),
+              ),
+            )
+            .toList(),
+      );
       final categorias = await api.getCategorias();
-      await db.clearCategorias();
-      await db.insertCategorias(categorias.map((c) => CategoriasCompanion(
-            id: Value(c.id),
-            nombre: Value(c.nombre),
-            descripcion: Value(c.descripcion),
-            activo: const Value(true),
-            createdAt: Value(DateTime.now()),
-            updatedAt: Value(DateTime.now()),
-          )).toList());
+      await db.transaction(() async {
+        await db.clearCategorias();
+        await db.insertCategorias(
+          categorias
+              .map(
+                (c) => CategoriasCompanion(
+                  id: Value(c.id),
+                  nombre: Value(c.nombre),
+                  descripcion: Value(c.descripcion),
+                  activo: const Value(true),
+                  createdAt: Value(DateTime.now()),
+                  updatedAt: Value(DateTime.now()),
+                ),
+              )
+              .toList(),
+        );
+      });
       if (kDebugMode) debugPrint('Pull productos: ${resp.data.length}');
       return resp.data.length;
     } catch (e) {
@@ -361,44 +438,65 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
 
       DateTime? desde;
       if (config.diasHistorialSync > 0) {
-        desde = DateTime.now().subtract(Duration(days: config.diasHistorialSync));
+        desde = DateTime.now().subtract(
+          Duration(days: config.diasHistorialSync),
+        );
       }
 
       final desdeStr = desde?.toIso8601String().substring(0, 10);
-      final ventas = await api.getVentas(pageSize: 1000, desde: desdeStr);
 
+      const pageSize = ApiConstants.maxPageSize;
+      int page = 1;
       int count = 0;
-      for (final v in ventas) {
-        final detallesJson = (v.toJson()['detalles'] as List?) ?? const [];
-        final detalles = <VentasDetalleLocalCompanion>[];
-        for (final d in detallesJson) {
-          final m = d as Map<String, dynamic>;
-          detalles.add(VentasDetalleLocalCompanion(
-            ventaId: Value(v.id ?? 0),
-            productoId: Value(m['producto_id'] as int? ?? 0),
-            nombreProducto: Value(m['nombre_producto'] as String? ?? ''),
-            precioUnitario: Value((m['precio_unitario'] as num?)?.toDouble() ?? 0),
-            cantidad: Value(m['cantidad'] as int? ?? 0),
-            subtotal: Value((m['subtotal'] as num?)?.toDouble() ?? 0),
-          ));
-        }
-        await db.upsertVentaConDetalle(
-          VentasLocalCompanion(
-            id: Value(v.id ?? 0),
-            folio: Value(v.folio),
-            fecha: Value(v.fecha ?? DateTime.now()),
-            subtotal: Value(v.subtotal),
-            iva: Value(v.iva),
-            total: Value(v.total),
-            metodoPago: Value(v.metodoPago),
-            montoRecibido: Value(v.montoRecibido),
-            cambio: Value(v.cambio),
-            synced: const Value(true),
-          ),
-          detalles,
+
+      while (true) {
+        final ventas = await api.getVentas(
+          page: page,
+          pageSize: pageSize,
+          desde: desdeStr,
         );
-        count++;
+        if (ventas.isEmpty) break;
+
+        for (final v in ventas) {
+          final detallesJson = (v.toJson()['detalles'] as List?) ?? const [];
+          final detalles = <VentasDetalleLocalCompanion>[];
+          for (final d in detallesJson) {
+            final m = d as Map<String, dynamic>;
+            detalles.add(
+              VentasDetalleLocalCompanion(
+                ventaId: Value(v.id ?? 0),
+                productoId: Value(m['producto_id'] as int? ?? 0),
+                nombreProducto: Value(m['nombre_producto'] as String? ?? ''),
+                precioUnitario: Value(
+                  (m['precio_unitario'] as num?)?.toDouble() ?? 0,
+                ),
+                cantidad: Value(m['cantidad'] as int? ?? 0),
+                subtotal: Value((m['subtotal'] as num?)?.toDouble() ?? 0),
+              ),
+            );
+          }
+          await db.upsertVentaConDetalle(
+            VentasLocalCompanion(
+              id: Value(v.id ?? 0),
+              folio: Value(v.folio),
+              fecha: Value(v.fecha ?? DateTime.now()),
+              subtotal: Value(v.subtotal),
+              iva: Value(v.iva),
+              total: Value(v.total),
+              metodoPago: Value(v.metodoPago),
+              montoRecibido: Value(v.montoRecibido),
+              cambio: Value(v.cambio),
+              synced: const Value(true),
+            ),
+            detalles,
+          );
+          count++;
+        }
+
+        if (ventas.length < pageSize) break;
+        page++;
       }
+
       if (kDebugMode) debugPrint('Pull ventas: $count');
       return count;
     } catch (e) {
@@ -415,37 +513,56 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
 
       DateTime? desde;
       if (config.diasHistorialSync > 0) {
-        desde = DateTime.now().subtract(Duration(days: config.diasHistorialSync));
+        desde = DateTime.now().subtract(
+          Duration(days: config.diasHistorialSync),
+        );
       }
       final desdeStr = desde?.toIso8601String().substring(0, 10);
 
-      final resp = await entradaService.getAll(pageSize: 1000, desde: desdeStr);
+      const pageSize = ApiConstants.maxPageSize;
+      int page = 1;
       int count = 0;
-      for (final e in resp.items) {
-        final detalles = <EntradasDetalleLocalCompanion>[];
-        for (final d in e.detalles) {
-          detalles.add(EntradasDetalleLocalCompanion(
-            entradaId: Value(e.id),
-            productoId: Value(d.productoId),
-            nombreProducto: Value(d.nombreProducto),
-            cantidad: Value(d.cantidad),
-            costoUnitario: Value(d.costoUnitario),
-          ));
-        }
-        await db.upsertEntradaConDetalle(
-          EntradasLocalCompanion(
-            id: Value(e.id),
-            folio: Value(e.folio),
-            proveedor: Value(e.proveedor),
-            observaciones: Value(e.observaciones),
-            total: Value(e.total),
-            fecha: Value(e.fecha),
-            synced: const Value(true),
-          ),
-          detalles,
+
+      while (true) {
+        final resp = await entradaService.getAll(
+          page: page,
+          pageSize: pageSize,
+          desde: desdeStr,
         );
-        count++;
+        if (resp.items.isEmpty) break;
+
+        for (final e in resp.items) {
+          final detalles = <EntradasDetalleLocalCompanion>[];
+          for (final d in e.detalles) {
+            detalles.add(
+              EntradasDetalleLocalCompanion(
+                entradaId: Value(e.id),
+                productoId: Value(d.productoId),
+                nombreProducto: Value(d.nombreProducto),
+                cantidad: Value(d.cantidad),
+                costoUnitario: Value(d.costoUnitario),
+              ),
+            );
+          }
+          await db.upsertEntradaConDetalle(
+            EntradasLocalCompanion(
+              id: Value(e.id),
+              folio: Value(e.folio),
+              proveedor: Value(e.proveedor),
+              observaciones: Value(e.observaciones),
+              total: Value(e.total),
+              fecha: Value(e.fecha),
+              synced: const Value(true),
+            ),
+            detalles,
+          );
+          count++;
+        }
+
+        if (!resp.hasMore) break;
+        page++;
       }
+
       if (kDebugMode) debugPrint('Pull entradas: $count');
       return count;
     } catch (e) {
@@ -461,7 +578,7 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
   }
 
   Future<({bool ok, int? id, String? folio, String? mensaje, bool encolado})>
-      intentarVenta(Map<String, dynamic> ventaData) async {
+  intentarVenta(Map<String, dynamic> ventaData) async {
     final clientId = ventaData['_client_id'] as String?;
     final cache = ref.read(cacheServiceProvider);
 
@@ -471,7 +588,7 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
         id: null,
         folio: null,
         mensaje: 'Falta client_id',
-        encolado: false
+        encolado: false,
       );
     }
 
@@ -482,7 +599,7 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
         id: null,
         folio: null,
         mensaje: 'Venta ya en cola (sincronizará con el botón)',
-        encolado: true
+        encolado: true,
       );
     }
 
@@ -501,15 +618,26 @@ class ConectividadNotifier extends Notifier<ConectividadEstado> {
       id: null,
       folio: null,
       mensaje: 'Venta guardada localmente — se sincroniza con el botón',
-      encolado: true
+      encolado: true,
     );
   }
 }
 
 final conectividadProvider =
     NotifierProvider<ConectividadNotifier, ConectividadEstado>(
-  ConectividadNotifier.new,
-);
+      ConectividadNotifier.new,
+    );
+
+/// Errores de la última sincronización de ventas. Se limpia al iniciar un
+/// nuevo ciclo de sync.
+final syncErroresProvider = StateProvider<List<String>>((ref) => const []);
+
+/// Errores fallidos en la sincronización (ventas que no se pudieron subir).
+final syncErroresPendientesProvider = FutureProvider.autoDispose<List<String>>((
+  ref,
+) async {
+  return ref.watch(syncErroresProvider);
+});
 
 final totalPendientesProvider = FutureProvider.autoDispose<int>((ref) async {
   final cache = ref.read(cacheServiceProvider);

@@ -81,7 +81,7 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
             ),
             actions: [
               IconButton(
-                onPressed: () => context.go('/inventario/entrada'),
+                onPressed: () => context.push('/inventario/entrada'),
                 icon: const Icon(Icons.add_shopping_cart),
                 tooltip: 'Entrada de inventario',
                 style: IconButton.styleFrom(
@@ -90,7 +90,7 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
               ),
               const SizedBox(width: 4),
               IconButton(
-                onPressed: () => context.go('/inventario/entradas'),
+                onPressed: () => context.push('/inventario/entradas'),
                 icon: const Icon(Icons.history),
                 tooltip: 'Historial de entradas',
                 style: IconButton.styleFrom(
@@ -108,13 +108,13 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
               ),
               const SizedBox(width: 8),
               IconButton.filledTonal(
-                onPressed: () => context.go('/inventario/escanear'),
+                onPressed: () => context.push('/inventario/escanear'),
                 icon: const Icon(Icons.qr_code_scanner),
                 tooltip: 'Escanear producto nuevo',
               ),
               const SizedBox(width: 4),
               IconButton.filled(
-                onPressed: () => context.go('/inventario/nuevo'),
+                onPressed: () => context.push('/inventario/nuevo'),
                 icon: const Icon(Icons.edit_note),
                 tooltip: 'Registro manual',
               ),
@@ -197,7 +197,7 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
                       padding: const EdgeInsets.only(bottom: 8),
                       child: ProductoCard(
                         producto: producto,
-                        onEdit: () => context.go(
+                        onEdit: () => context.push(
                           '/inventario/editar/${producto.id}',
                         ),
                         onDelete: () => _showDeleteConfirmation(
@@ -259,13 +259,13 @@ class _InventarioScreenState extends ConsumerState<InventarioScreen> {
             tooltip: 'Agregar producto',
             onSelected: (value) {
               if (value == 'escanear') {
-                context.go('/inventario/escanear');
+                context.push('/inventario/escanear');
               } else if (value == 'manual') {
-                context.go('/inventario/nuevo');
+                context.push('/inventario/nuevo');
               } else if (value == 'entrada') {
-                context.go('/inventario/entrada');
+                context.push('/inventario/entrada');
               } else if (value == 'historial_entradas') {
-                context.go('/inventario/entradas');
+                context.push('/inventario/entradas');
               }
             },
             itemBuilder: (_) => [

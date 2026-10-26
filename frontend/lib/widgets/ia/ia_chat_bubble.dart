@@ -13,9 +13,11 @@ import '../chat/tarjeta_sugerencia.dart';
 
 /// Burbuja de chat flotante estilo Messenger para la pantalla de caja.
 ///
-/// Colapsada: un [CircleAvatar] con pulso animado cuando hay sugerencias no
-/// leídas. Expandida: un panel con mini-chat inline, sugerencias contextuales
-/// y acceso al chat completo.
+/// Soporta:
+/// - Arrastre (drag) para moverla a cualquier lugar de la pantalla
+/// - Colapsar/expandir (toggle)
+/// - Activar/desactivar desde ajustes
+/// - Guardado de posición persistente en SharedPreferences
 class IaChatBubble extends ConsumerStatefulWidget {
   const IaChatBubble({super.key});
 
@@ -65,32 +67,19 @@ class _IaChatBubbleState extends ConsumerState<IaChatBubble>
     super.dispose();
   }
 
+  bool get _esActivo => ref.watch(burbujaActivaProvider);
+
   bool get _isExpanded => ref.watch(burbujaExpandidaProvider);
 
-  void _toggleBubble() {
-    final expandido = ref.read(burbujaExpandidaProvider);
-    if (!expandido) {
-      final sugs = ref
-              .read(copilotSugerenciasProvider)
-              .asData
-              ?.value
-              .sugerencias ??
-          [];
-      _ultimoVisto = sugs.length;
-      _pulseCtrl.stop();
-      _pulseCtrl.reset();
-    }
+  void _toggleExpand() {
     ref.read(burbujaExpandidaProvider.notifier).toggle();
   }
 
+  void _toggleActivo() {
+    ref.read(burbujaActivaProvider.notifier).toggle();
+  }
+
   void _closeBubble() {
-    final sugs = ref
-            .read(copilotSugerenciasProvider)
-            .asData
-            ?.value
-            .sugerencias ??
-        [];
-    _ultimoVisto = sugs.length;
     ref.read(burbujaExpandidaProvider.notifier).close();
   }
 
@@ -153,39 +142,24 @@ class _IaChatBubbleState extends ConsumerState<IaChatBubble>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final sugsAsync = ref.watch(copilotSugerenciasProvider);
-    final carritoCount = ref.watch(carritoCantidadProvider);
     final posicion = ref.watch(burbujaPosicionProvider);
+    final isExpanded = ref.watch(burbujaExpandidaProvider);
+    final sugerenciasAsync = ref.watch(copilotSugerenciasProvider);
+    final sugerencias = sugerenciasAsync.asData?.value.sugerencias ?? const [];
+    final carrito = ref.watch(carritoProvider);
 
-    final sugerencias = sugsAsync.asData?.value.sugerencias ?? [];
-    final nuevas = sugerencias.length - _ultimoVisto;
-    final hayNuevas = !_isExpanded && nuevas > 0;
-
-    if (hayNuevas && !_pulseCtrl.isAnimating) {
-      _pulseCtrl.repeat(reverse: true);
-    } else if (!hayNuevas && _pulseCtrl.isAnimating) {
-      _pulseCtrl.stop();
-      _pulseCtrl.reset();
+    if (isExpanded) {
+      return _buildPanel(theme, sugerencias, carrito.length, posicion);
+    } else {
+      final nuevas = sugerencias.length;
+      return _buildBubbleButton(theme, nuevas, posicion);
     }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: posicion == BurbujaPosicion.bottomLeft
-          ? CrossAxisAlignment.start
-          : CrossAxisAlignment.end,
-      children: [
-        if (_isExpanded)
-          _buildPanel(theme, sugerencias, carritoCount, posicion),
-        const SizedBox(height: 8),
-        _buildBubbleButton(theme, nuevas, posicion),
-      ],
-    );
   }
 
   Widget _buildBubbleButton(
     ThemeData theme,
     int nuevas,
-    BurbujaPosicion posicion,
+    BurbujaPosicionOffset posicion,
   ) {
     final boton = Material(
       elevation: _isExpanded ? 0 : 4,
@@ -193,7 +167,7 @@ class _IaChatBubbleState extends ConsumerState<IaChatBubble>
       color: theme.colorScheme.tertiaryContainer,
       child: InkWell(
         customBorder: const CircleBorder(),
-        onTap: _toggleBubble,
+        onTap: _toggleExpand,
         child: Container(
           width: 56,
           height: 56,
@@ -218,13 +192,20 @@ class _IaChatBubbleState extends ConsumerState<IaChatBubble>
           )
         : boton;
 
-    return AnimatedBuilder(
-      animation: _pulseAnim,
-      builder: (context, child) {
-        return Transform.scale(
-          scale: nuevas > 0 && !_isExpanded ? _pulseAnim.value : 1.0,
-          child: child,
+    return GestureDetector(
+      onPanUpdate: (DragUpdateDetails details) {
+        final current = ref.read(burbujaPosicionProvider);
+        final size = MediaQuery.of(context).size;
+        final newX = (current.x + details.delta.dx).clamp(
+          0.0,
+          size.width - 60.0,
         );
+        final newY = (current.y + details.delta.dy).clamp(
+          0.0,
+          size.height - MediaQuery.of(context).padding.bottom - 60.0,
+        );
+        ref.read(burbujaPosicionProvider.notifier).setX(newX);
+        ref.read(burbujaPosicionProvider.notifier).setY(newY);
       },
       child: contenido,
     );
@@ -234,7 +215,7 @@ class _IaChatBubbleState extends ConsumerState<IaChatBubble>
     ThemeData theme,
     List<Sugerencia> sugerencias,
     int carritoCount,
-    BurbujaPosicion posicion,
+    BurbujaPosicionOffset posicion,
   ) {
     final isDesktop = MediaQuery.of(context).size.width > 600;
     final panelWidth = isDesktop ? 380.0 : MediaQuery.of(context).size.width * 0.92;
@@ -242,46 +223,62 @@ class _IaChatBubbleState extends ConsumerState<IaChatBubble>
         ? 520.0
         : MediaQuery.of(context).size.height * 0.55;
 
-    return Container(
-      width: panelWidth,
-      height: panelHeight,
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildHeader(theme, posicion),
-            if (carritoCount > 0 && _mensajes.isEmpty)
-              _buildSuggestionsSection(theme, sugerencias),
-            Expanded(
-              child: _buildChatArea(theme),
+    return GestureDetector(
+      onPanUpdate: (DragUpdateDetails details) {
+        final current = ref.read(burbujaPosicionProvider);
+        final size = MediaQuery.of(context).size;
+        final newX = (current.x + details.delta.dx).clamp(
+          0.0,
+          size.width - panelWidth - 16.0,
+        );
+        final newY = (current.y + details.delta.dy).clamp(
+          0.0,
+          size.height - panelHeight - MediaQuery.of(context).padding.bottom - 16.0,
+        );
+        ref.read(burbujaPosicionProvider.notifier).setX(newX);
+        ref.read(burbujaPosicionProvider.notifier).setY(newY);
+      },
+      child: Container(
+        width: panelWidth,
+        height: panelHeight,
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
             ),
-            if (_cargando) _buildTypingIndicator(theme),
-            _buildInputArea(theme),
-            _buildFooter(theme),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 4,
+              offset: const Offset(0, 1),
+            ),
           ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildHeader(theme, posicion),
+              if (carritoCount > 0 && _mensajes.isEmpty)
+                _buildSuggestionsSection(theme, sugerencias),
+              Expanded(
+                child: _buildChatArea(theme),
+              ),
+              if (_cargando) _buildTypingIndicator(theme),
+              _buildInputArea(theme),
+              _buildFooter(theme),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildHeader(ThemeData theme, BurbujaPosicion posicion) {
+  Widget _buildHeader(ThemeData theme, BurbujaPosicionOffset posicion) {
     final fuente =
         ref.watch(copilotSugerenciasProvider).asData?.value.fuente ?? 'local';
     final isLlm = fuente == 'hibrido' || fuente == 'llm';
@@ -312,7 +309,9 @@ class _IaChatBubbleState extends ConsumerState<IaChatBubble>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: isLlm ? Colors.deepPurple.withValues(alpha: 0.15) : theme.colorScheme.outline.withValues(alpha: 0.15),
+              color: isLlm
+                  ? Colors.deepPurple.withValues(alpha: 0.15)
+                  : theme.colorScheme.outline.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
@@ -337,14 +336,14 @@ class _IaChatBubbleState extends ConsumerState<IaChatBubble>
           ),
           const Spacer(),
           Tooltip(
-            message: posicion == BurbujaPosicion.bottomRight
-                ? 'Mover a izquierda'
-                : 'Mover a derecha',
+            message: posicion.x > 0 && posicion.y > 0
+                ? 'Arrastrar burbuja'
+                : 'Mover a posición por defecto',
             child: IconButton(
               icon: const Icon(Icons.swap_horiz, size: 20),
               visualDensity: VisualDensity.compact,
               onPressed: () =>
-                  ref.read(burbujaPosicionProvider.notifier).toggle(),
+                  ref.read(burbujaPosicionProvider.notifier).togglePosition(),
             ),
           ),
           IconButton(
@@ -657,7 +656,7 @@ class _BurbujaUsuario extends StatelessWidget {
               topLeft: Radius.circular(14),
               topRight: Radius.circular(14),
               bottomLeft: Radius.circular(14),
-              bottomRight: Radius.circular(4),
+              bottomRight: Radius.circular(14),
             ),
           ),
           child: Text(
@@ -695,7 +694,7 @@ class _BurbujaAsistente extends StatelessWidget {
             borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(14),
               topRight: Radius.circular(14),
-              bottomLeft: Radius.circular(4),
+              bottomLeft: Radius.circular(14),
               bottomRight: Radius.circular(14),
             ),
           ),

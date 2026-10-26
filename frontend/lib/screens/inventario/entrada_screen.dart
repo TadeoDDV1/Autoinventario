@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../core/constants/durations.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/format/money.dart';
+import '../../core/navigation/nav_helpers.dart';
 import '../../core/theme/glass_tokens.dart';
 import '../../core/widgets/atmospheric_background.dart';
 import '../../core/widgets/glass_container.dart';
@@ -96,7 +96,7 @@ class _EntradaScreenState extends ConsumerState<EntradaScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        context.go('/inventario');
+        popOrGo(context, '/inventario');
       }
     } on ApiException catch (e) {
       if (mounted) {
@@ -129,7 +129,7 @@ class _EntradaScreenState extends ConsumerState<EntradaScreen> {
         title: const Text('Entrada de inventario'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/inventario'),
+          onPressed: () => popOrGo(context, '/inventario'),
         ),
       ),
       body: Stack(

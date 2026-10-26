@@ -1,8 +1,8 @@
-import 'dart:io';
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
+
+import 'connection/connection_stub.dart'
+    if (dart.library.io) 'connection/connection_native.dart'
+    if (dart.library.js_interop) 'connection/connection_web.dart';
 
 part 'app_database.g.dart';
 
@@ -40,7 +40,8 @@ class VentasPendientes extends Table {
   DateTimeColumn get createdAt => dateTime().named('created_at')();
   TextColumn get ventaData => text().named('venta_data')();
   RealColumn get total => real().named('total')();
-  BoolColumn get synced => boolean().withDefault(const Constant(false)).named('synced')();
+  BoolColumn get synced =>
+      boolean().withDefault(const Constant(false)).named('synced')();
 
   @override
   Set<Column> get primaryKey => {clientId};
@@ -50,7 +51,8 @@ class EntradasPendientes extends Table {
   TextColumn get clientId => text().named('client_id')();
   DateTimeColumn get createdAt => dateTime().named('created_at')();
   TextColumn get entradaData => text().named('entrada_data')();
-  BoolColumn get synced => boolean().withDefault(const Constant(false)).named('synced')();
+  BoolColumn get synced =>
+      boolean().withDefault(const Constant(false)).named('synced')();
 
   @override
   Set<Column> get primaryKey => {clientId};
@@ -60,7 +62,8 @@ class ProductosPendientes extends Table {
   TextColumn get clientId => text().named('client_id')();
   DateTimeColumn get createdAt => dateTime().named('created_at')();
   TextColumn get productoData => text().named('producto_data')();
-  BoolColumn get synced => boolean().withDefault(const Constant(false)).named('synced')();
+  BoolColumn get synced =>
+      boolean().withDefault(const Constant(false)).named('synced')();
 
   @override
   Set<Column> get primaryKey => {clientId};
@@ -79,7 +82,8 @@ class VentasLocal extends Table {
   TextColumn get metodoPago => text().named('metodo_pago')();
   RealColumn get montoRecibido => real().named('monto_recibido').nullable()();
   RealColumn get cambio => real().named('cambio').nullable()();
-  BoolColumn get synced => boolean().withDefault(const Constant(true)).named('synced')();
+  BoolColumn get synced =>
+      boolean().withDefault(const Constant(true)).named('synced')();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -105,7 +109,8 @@ class EntradasLocal extends Table {
   RealColumn get total => real().named('total')();
   DateTimeColumn get fecha => dateTime().named('fecha')();
   TextColumn get clientId => text().named('client_id').nullable()();
-  BoolColumn get synced => boolean().withDefault(const Constant(true)).named('synced')();
+  BoolColumn get synced =>
+      boolean().withDefault(const Constant(true)).named('synced')();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -131,69 +136,103 @@ class SyncMeta extends Table {
   Set<Column> get primaryKey => {key};
 }
 
-@DriftDatabase(tables: [
-  Productos,
-  Categorias,
-  VentasPendientes,
-  EntradasPendientes,
-  ProductosPendientes,
-  VentasLocal,
-  VentasDetalleLocal,
-  EntradasLocal,
-  EntradasDetalleLocal,
-  SyncMeta,
-])
+@DriftDatabase(
+  tables: [
+    Productos,
+    Categorias,
+    VentasPendientes,
+    EntradasPendientes,
+    ProductosPendientes,
+    VentasLocal,
+    VentasDetalleLocal,
+    EntradasLocal,
+    EntradasDetalleLocal,
+    SyncMeta,
+  ],
+)
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(_openConnection());
+  static int _provisionalIdCounter = -1;
+  AppDatabase() : super(openConnection());
 
-  AppDatabase.test() : super(NativeDatabase.memory());
+  AppDatabase.test() : super(createTestConnection());
 
   @override
   int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (Migrator m) async {
-          await m.createAll();
-          await m.database.customStatement('PRAGMA foreign_keys = ON;');
-          await m.database.customStatement('CREATE INDEX IF NOT EXISTS idx_productos_nombre ON productos (nombre DESC);');
-          await m.database.customStatement('CREATE INDEX IF NOT EXISTS idx_productos_categoria ON productos (categoria_id DESC);');
-          await m.database.customStatement('CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas_local (fecha DESC);');
-          await m.database.customStatement('CREATE INDEX IF NOT EXISTS idx_ventas_detalle_venta ON ventas_detalle_local (venta_id DESC);');
-          await m.database.customStatement('CREATE INDEX IF NOT EXISTS idx_entradas_fecha ON entradas_local (fecha DESC);');
-          await m.database.customStatement('CREATE INDEX IF NOT EXISTS idx_entradas_detalle_entrada ON entradas_detalle_local (entrada_id DESC);');
-        },
-        onUpgrade: (Migrator m, int from, int to) async {
-          if (from < 2) {
-            await m.database.customStatement('CREATE INDEX IF NOT EXISTS idx_productos_nombre ON productos (nombre DESC);');
-            await m.database.customStatement('CREATE INDEX IF NOT EXISTS idx_productos_categoria ON productos (categoria_id DESC);');
-            await m.database.customStatement('UPDATE productos SET activo = 1 WHERE activo IS NULL;');
-            await m.database.customStatement('DELETE FROM productos WHERE id IS NULL OR nombre IS NULL;');
-          }
-          if (from < 3) {
-            await m.createTable(entradasPendientes);
-          }
-          if (from < 4) {
-            await m.createTable(productosPendientes);
-          }
-          if (from < 5) {
-            await m.createTable(ventasLocal);
-            await m.createTable(ventasDetalleLocal);
-            await m.createTable(entradasLocal);
-            await m.createTable(entradasDetalleLocal);
-            await m.createTable(syncMeta);
-            try {
-              await m.database.customStatement('CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas_local (fecha DESC);');
-              await m.database.customStatement('CREATE INDEX IF NOT EXISTS idx_ventas_detalle_venta ON ventas_detalle_local (venta_id DESC);');
-              await m.database.customStatement('CREATE INDEX IF NOT EXISTS idx_entradas_fecha ON entradas_local (fecha DESC);');
-              await m.database.customStatement('CREATE INDEX IF NOT EXISTS idx_entradas_detalle_entrada ON entradas_detalle_local (entrada_id DESC);');
-            } catch (_) {
-              // Los índices no son críticos — la migración debe continuar
-            }
-          }
-          await m.database.customStatement('PRAGMA foreign_keys = ON;');
-        },
+    onCreate: (Migrator m) async {
+      await m.createAll();
+      await m.database.customStatement('PRAGMA foreign_keys = ON;');
+      await m.database.customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_productos_nombre ON productos (nombre DESC);',
       );
+      await m.database.customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_productos_categoria ON productos (categoria_id DESC);',
+      );
+      await m.database.customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas_local (fecha DESC);',
+      );
+      await m.database.customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_ventas_detalle_venta ON ventas_detalle_local (venta_id DESC);',
+      );
+      await m.database.customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_entradas_fecha ON entradas_local (fecha DESC);',
+      );
+      await m.database.customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_entradas_detalle_entrada ON entradas_detalle_local (entrada_id DESC);',
+      );
+    },
+    onUpgrade: (Migrator m, int from, int to) async {
+      if (from < 2) {
+        await m.database.customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_productos_nombre ON productos (nombre DESC);',
+        );
+        await m.database.customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_productos_categoria ON productos (categoria_id DESC);',
+        );
+        await m.database.customStatement(
+          'UPDATE productos SET activo = 1 WHERE activo IS NULL;',
+        );
+        await m.database.customStatement(
+          'DELETE FROM productos WHERE id IS NULL OR nombre IS NULL;',
+        );
+      }
+      if (from < 3) {
+        await m.createTable(entradasPendientes);
+      }
+      if (from < 4) {
+        await m.createTable(productosPendientes);
+      }
+      if (from < 5) {
+        await m.createTable(ventasLocal);
+        await m.createTable(ventasDetalleLocal);
+        await m.createTable(entradasLocal);
+        await m.createTable(entradasDetalleLocal);
+        await m.createTable(syncMeta);
+        try {
+          await m.database.customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas_local (fecha DESC);',
+          );
+          await m.database.customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_ventas_detalle_venta ON ventas_detalle_local (venta_id DESC);',
+          );
+          await m.database.customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_entradas_fecha ON entradas_local (fecha DESC);',
+          );
+          await m.database.customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_entradas_detalle_entrada ON entradas_detalle_local (entrada_id DESC);',
+          );
+        } catch (_) {
+          // Los índices no son críticos — la migración debe continuar
+        }
+      }
+      await m.database.customStatement('PRAGMA foreign_keys = ON;');
+    },
+    beforeOpen: (details) async {
+      await customStatement('PRAGMA foreign_keys = ON;');
+    },
+  );
 
   // ========== PRODUCTOS ==========
   Future<void> clearProductos() => delete(productos).go();
@@ -202,63 +241,90 @@ class AppDatabase extends _$AppDatabase {
       batch.insertAllOnConflictUpdate(productos, rows);
     });
   }
+
   Future<List<Producto>> getAllProductos() => select(productos).get();
 
   Future<List<Producto>> buscarProductos(String query) {
     return (select(productos)
-          ..where((tbl) =>
-              tbl.nombre.like('%$query%') |
-              tbl.codigoBarras.like('%$query%') |
-              tbl.marca.like('%$query%'))
+          ..where(
+            (tbl) =>
+                tbl.nombre.like('%$query%') |
+                tbl.codigoBarras.like('%$query%') |
+                tbl.marca.like('%$query%'),
+          )
           ..limit(50))
         .get();
   }
 
   Future<Producto?> getProductoById(int id) {
-    return (select(productos)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
+    return (select(
+      productos,
+    )..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
   }
 
   Future<Producto?> getProductoByCodigo(String codigo) {
-    return (select(productos)
-          ..where((tbl) => tbl.codigoBarras.equals(codigo)))
-        .getSingleOrNull();
+    return (select(
+      productos,
+    )..where((tbl) => tbl.codigoBarras.equals(codigo))).getSingleOrNull();
   }
 
   Future<List<Producto>> getProductosByCategoria(int? categoriaId) {
     if (categoriaId == null) return getAllProductos();
-    return (select(productos)
-          ..where((tbl) => tbl.categoriaId.equals(categoriaId)))
-        .get();
+    return (select(
+      productos,
+    )..where((tbl) => tbl.categoriaId.equals(categoriaId))).get();
   }
 
   Future<int> countProductos() async {
     final count = productos.id.count();
-    final result = await (selectOnly(productos)..addColumns([count])).getSingle();
+    final result = await (selectOnly(
+      productos,
+    )..addColumns([count])).getSingle();
     return result.read(count)!;
   }
 
   Future<int> insertProductoLocal(ProductosCompanion row) async {
-    final id = -(DateTime.now().millisecondsSinceEpoch % 1000000);
+    final id = _provisionalIdCounter--;
     final withId = row.copyWith(id: Value(id));
     await into(productos).insertOnConflictUpdate(withId);
     return id;
+  }
+
+  /// Actualiza un producto existente en la BD local (offline-first).
+  Future<void> actualizarProductoLocal(int id, ProductosCompanion row) async {
+    await (update(productos)..where((tbl) => tbl.id.equals(id))).write(row);
   }
 
   Future<void> decrementarStock(int productoId, int cantidad) async {
     final actual = await getProductoById(productoId);
     if (actual == null) return;
     final nuevo = (actual.stockActual - cantidad).clamp(0, 1 << 31);
-    await (update(productos)..where((tbl) => tbl.id.equals(productoId)))
-        .write(ProductosCompanion(stockActual: Value(nuevo)));
+    await (update(productos)..where((tbl) => tbl.id.equals(productoId))).write(
+      ProductosCompanion(stockActual: Value(nuevo)),
+    );
   }
 
-  Future<void> reemplazarProductoProvisional(int idProvisional, int idReal) async {
-    await (update(productos)..where((tbl) => tbl.id.equals(idProvisional)))
-        .write(ProductosCompanion(id: Value(idReal)));
+  Future<void> reemplazarProductoProvisional(
+    int idProvisional,
+    int idReal,
+  ) async {
+    await transaction(() async {
+      final existing = await (select(
+        productos,
+      )..where((tbl) => tbl.id.equals(idProvisional))).getSingleOrNull();
+      if (existing == null) return;
+      await (delete(
+        productos,
+      )..where((tbl) => tbl.id.equals(idProvisional))).go();
+      final companion = existing.toCompanion(true);
+      await into(productos).insert(companion.copyWith(id: Value(idReal)));
+    });
   }
 
   Future<void> borrarProductoProvisional(int idProvisional) async {
-    await (delete(productos)..where((tbl) => tbl.id.equals(idProvisional))).go();
+    await (delete(
+      productos,
+    )..where((tbl) => tbl.id.equals(idProvisional))).go();
   }
 
   // ========== CATEGORIAS ==========
@@ -268,40 +334,56 @@ class AppDatabase extends _$AppDatabase {
       batch.insertAllOnConflictUpdate(categorias, rows);
     });
   }
+
   Future<List<Categoria>> getAllCategorias() => select(categorias).get();
 
   // ========== VENTAS PENDIENTES (cola offline) ==========
   Future<void> addVentaPendiente(VentasPendientesCompanion row) async {
     await into(ventasPendientes).insertOnConflictUpdate(row);
   }
-  Future<List<VentasPendiente>> getVentasPendientes() =>
-      (select(ventasPendientes)..where((tbl) => tbl.synced.equals(false))).get();
+
+  Future<List<VentasPendiente>> getVentasPendientes() => (select(
+    ventasPendientes,
+  )..where((tbl) => tbl.synced.equals(false))).get();
   Future<void> markVentasSynced(List<String> clientIds) async {
-    await (delete(ventasPendientes)..where((tbl) => tbl.clientId.isIn(clientIds))).go();
+    await (delete(
+      ventasPendientes,
+    )..where((tbl) => tbl.clientId.isIn(clientIds))).go();
   }
 
   // ========== ENTRADAS PENDIENTES (cola offline) ==========
   Future<void> addEntradaPendiente(EntradasPendientesCompanion row) async {
     await into(entradasPendientes).insertOnConflictUpdate(row);
   }
-  Future<List<EntradasPendiente>> getEntradasPendientes() =>
-      (select(entradasPendientes)..where((tbl) => tbl.synced.equals(false))).get();
+
+  Future<List<EntradasPendiente>> getEntradasPendientes() => (select(
+    entradasPendientes,
+  )..where((tbl) => tbl.synced.equals(false))).get();
   Future<void> markEntradasSynced(List<String> clientIds) async {
-    await (delete(entradasPendientes)..where((tbl) => tbl.clientId.isIn(clientIds))).go();
+    await (delete(
+      entradasPendientes,
+    )..where((tbl) => tbl.clientId.isIn(clientIds))).go();
   }
 
   // ========== PRODUCTOS PENDIENTES (cola offline) ==========
   Future<void> addProductoPendiente(ProductosPendientesCompanion row) async {
     await into(productosPendientes).insertOnConflictUpdate(row);
   }
-  Future<List<ProductosPendiente>> getProductosPendientes() =>
-      (select(productosPendientes)..where((tbl) => tbl.synced.equals(false))).get();
+
+  Future<List<ProductosPendiente>> getProductosPendientes() => (select(
+    productosPendientes,
+  )..where((tbl) => tbl.synced.equals(false))).get();
   Future<void> markProductosSynced(List<String> clientIds) async {
-    await (delete(productosPendientes)..where((tbl) => tbl.clientId.isIn(clientIds))).go();
+    await (delete(
+      productosPendientes,
+    )..where((tbl) => tbl.clientId.isIn(clientIds))).go();
   }
 
   // ========== VENTAS (confirmadas) ==========
-  Future<void> insertVentaConDetalle(VentasLocalCompanion venta, List<VentasDetalleLocalCompanion> detalles) async {
+  Future<void> insertVentaConDetalle(
+    VentasLocalCompanion venta,
+    List<VentasDetalleLocalCompanion> detalles,
+  ) async {
     await transaction(() async {
       await into(ventasLocal).insertOnConflictUpdate(venta);
       for (final d in detalles) {
@@ -310,10 +392,15 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  Future<void> upsertVentaConDetalle(VentasLocalCompanion venta, List<VentasDetalleLocalCompanion> detalles) async {
+  Future<void> upsertVentaConDetalle(
+    VentasLocalCompanion venta,
+    List<VentasDetalleLocalCompanion> detalles,
+  ) async {
     await transaction(() async {
       await into(ventasLocal).insertOnConflictUpdate(venta);
-      await (delete(ventasDetalleLocal)..where((tbl) => tbl.ventaId.equals(venta.id.value))).go();
+      await (delete(
+        ventasDetalleLocal,
+      )..where((tbl) => tbl.ventaId.equals(venta.id.value))).go();
       for (final d in detalles) {
         await into(ventasDetalleLocal).insert(d);
       }
@@ -324,12 +411,36 @@ class AppDatabase extends _$AppDatabase {
   /// También actualiza los detalles asociados.
   Future<void> reemplazarIdVentaLocal(int idTemporal, int idReal) async {
     await transaction(() async {
-      // Actualizar el ID de la venta
-      await (update(ventasLocal)..where((tbl) => tbl.id.equals(idTemporal)))
-          .write(VentasLocalCompanion(id: Value(idReal), synced: const Value(true)));
-      // Actualizar los detalles asociados
-      await (update(ventasDetalleLocal)..where((tbl) => tbl.ventaId.equals(idTemporal)))
-          .write(VentasDetalleLocalCompanion(ventaId: Value(idReal)));
+      final venta = await (select(
+        ventasLocal,
+      )..where((tbl) => tbl.id.equals(idTemporal))).getSingleOrNull();
+      if (venta == null) return;
+
+      final detalles = await (select(
+        ventasDetalleLocal,
+      )..where((tbl) => tbl.ventaId.equals(idTemporal))).get();
+
+      // Delete old venta y sus detalles
+      await (delete(
+        ventasDetalleLocal,
+      )..where((tbl) => tbl.ventaId.equals(idTemporal))).go();
+      await (delete(
+        ventasLocal,
+      )..where((tbl) => tbl.id.equals(idTemporal))).go();
+
+      // Insert new venta con ID real
+      final nuevaVenta = venta
+          .toCompanion(true)
+          .copyWith(id: Value(idReal), synced: const Value(true));
+      await into(ventasLocal).insert(nuevaVenta);
+
+      // Insert new detalles con nuevo ventaId
+      for (final d in detalles) {
+        final nuevoDetalle = d
+            .toCompanion(true)
+            .copyWith(ventaId: Value(idReal));
+        await into(ventasDetalleLocal).insert(nuevoDetalle);
+      }
     });
   }
 
@@ -348,21 +459,30 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<VentasLocalData?> getVentaByIdLocal(int id) {
-    return (select(ventasLocal)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
+    return (select(
+      ventasLocal,
+    )..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
   }
 
   Future<List<VentasDetalleLocalData>> getDetallesByVenta(int ventaId) {
-    return (select(ventasDetalleLocal)..where((tbl) => tbl.ventaId.equals(ventaId))).get();
+    return (select(
+      ventasDetalleLocal,
+    )..where((tbl) => tbl.ventaId.equals(ventaId))).get();
   }
 
   Future<int> countVentas() async {
     final count = ventasLocal.id.count();
-    final result = await (selectOnly(ventasLocal)..addColumns([count])).getSingle();
+    final result = await (selectOnly(
+      ventasLocal,
+    )..addColumns([count])).getSingle();
     return result.read(count) ?? 0;
   }
 
   // ========== ENTRADAS (confirmadas) ==========
-  Future<void> insertEntradaConDetalle(EntradasLocalCompanion entrada, List<EntradasDetalleLocalCompanion> detalles) async {
+  Future<void> insertEntradaConDetalle(
+    EntradasLocalCompanion entrada,
+    List<EntradasDetalleLocalCompanion> detalles,
+  ) async {
     await transaction(() async {
       await into(entradasLocal).insertOnConflictUpdate(entrada);
       for (final d in detalles) {
@@ -371,10 +491,15 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  Future<void> upsertEntradaConDetalle(EntradasLocalCompanion entrada, List<EntradasDetalleLocalCompanion> detalles) async {
+  Future<void> upsertEntradaConDetalle(
+    EntradasLocalCompanion entrada,
+    List<EntradasDetalleLocalCompanion> detalles,
+  ) async {
     await transaction(() async {
       await into(entradasLocal).insertOnConflictUpdate(entrada);
-      await (delete(entradasDetalleLocal)..where((tbl) => tbl.entradaId.equals(entrada.id.value))).go();
+      await (delete(
+        entradasDetalleLocal,
+      )..where((tbl) => tbl.entradaId.equals(entrada.id.value))).go();
       for (final d in detalles) {
         await into(entradasDetalleLocal).insert(d);
       }
@@ -396,16 +521,22 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<EntradasLocalData?> getEntradaByIdLocal(int id) {
-    return (select(entradasLocal)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
+    return (select(
+      entradasLocal,
+    )..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
   }
 
   Future<List<EntradasDetalleLocalData>> getDetallesByEntrada(int entradaId) {
-    return (select(entradasDetalleLocal)..where((tbl) => tbl.entradaId.equals(entradaId))).get();
+    return (select(
+      entradasDetalleLocal,
+    )..where((tbl) => tbl.entradaId.equals(entradaId))).get();
   }
 
   Future<int> countEntradas() async {
     final count = entradasLocal.id.count();
-    final result = await (selectOnly(entradasLocal)..addColumns([count])).getSingle();
+    final result = await (selectOnly(
+      entradasLocal,
+    )..addColumns([count])).getSingle();
     return result.read(count) ?? 0;
   }
 
@@ -421,15 +552,10 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<String?> getSyncMeta(String key) async {
-    final row = await (select(syncMeta)..where((tbl) => tbl.key.equals(key))).getSingleOrNull();
+    final row = await (select(
+      syncMeta,
+    )..where((tbl) => tbl.key.equals(key))).getSingleOrNull();
     return row?.value;
   }
 }
 
-LazyDatabase _openConnection() {
-  return LazyDatabase(() async {
-    final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'app.db'));
-    return NativeDatabase(file);
-  });
-}

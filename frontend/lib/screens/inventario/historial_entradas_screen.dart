@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/format/money.dart';
+import '../../core/navigation/nav_helpers.dart';
 import '../../core/widgets/atmospheric_background.dart';
 import '../../models/entrada.dart';
 import '../../providers/entrada_provider.dart';
@@ -177,7 +177,7 @@ class _HistorialEntradasScreenState
         title: const Text('Historial de entradas'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/inventario'),
+          onPressed: () => popOrGo(context, '/inventario'),
         ),
       ),
       body: Stack(

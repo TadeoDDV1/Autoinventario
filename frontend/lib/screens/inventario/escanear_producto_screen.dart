@@ -7,6 +7,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/format/money.dart';
+import '../../core/navigation/nav_helpers.dart';
 import '../../core/theme/glass_tokens.dart';
 import '../../core/widgets/atmospheric_background.dart';
 import '../../core/widgets/glass_container.dart';
@@ -182,7 +183,9 @@ class _EscanearProductoScreenState extends ConsumerState<EscanearProductoScreen>
             behavior: SnackBarBehavior.floating,
           ),
         );
-        context.go('/inventario/editar/${local.id}');
+        // Reemplazamos escanear por editar: al guardar, "atrás" vuelve a
+        // inventario y no al escáner que ya cumplió su función.
+        replaceWith(context, '/inventario/editar/${local.id}');
         return;
       }
       // No existe: pasar a autocompletado
@@ -299,7 +302,7 @@ class _EscanearProductoScreenState extends ConsumerState<EscanearProductoScreen>
         title: const Text('Escanear producto nuevo'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/inventario'),
+          onPressed: () => popOrGo(context, '/inventario'),
         ),
       ),
       body: Stack(
@@ -708,8 +711,12 @@ class _EscanearProductoScreenState extends ConsumerState<EscanearProductoScreen>
                 FilledButton.icon(
                   onPressed: () {
                     if (_productoCreadoId != null) {
-                      context.go('/inventario/editar/$_productoCreadoId');
+                      replaceWith(
+                        context,
+                        '/inventario/editar/$_productoCreadoId',
+                      );
                     } else {
+                      // Salimos del stack overlay y volvemos al inventario.
                       context.go('/inventario');
                     }
                   },
